@@ -1,0 +1,7 @@
+{
+  "name": "Rave Superblaster 3000",
+  "description": "A high-octane, browser-based groovebox inspired by the EP-133 KO II. Features a synthesized drum engine, step sequencer, and AI-powered pattern generation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
