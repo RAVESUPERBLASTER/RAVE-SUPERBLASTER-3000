@@ -1,13 +1,16 @@
 
 import React, { forwardRef, useImperativeHandle, useRef, memo } from 'react';
 import { Track } from '../types';
+import { ChevronDownIcon } from '@heroicons/react/24/solid';
 
 interface PadProps {
   track: Track;
   isSelected: boolean;
   onSelectVariation: (id: number, variation: number) => void;
   onSelect: (id: number) => void;
+  onTrigger: (id: number) => void;
   onToggleMute: (id: number) => void;
+  onOpenLibrary: (id: number) => void;
   shortcutKey: string;
 }
 
@@ -16,24 +19,24 @@ export interface PadHandle {
 }
 
 // Map track colors to specific styling classes
-const PAD_COLORS: Record<string, { border: string, bg: string, text: string, shadow: string }> = {
-  red: { border: 'border-red-500', bg: 'bg-red-500', text: 'text-red-500', shadow: 'shadow-red-500/50' },
-  orange: { border: 'border-orange-500', bg: 'bg-orange-500', text: 'text-orange-500', shadow: 'shadow-orange-500/50' },
-  amber: { border: 'border-amber-500', bg: 'bg-amber-500', text: 'text-amber-500', shadow: 'shadow-amber-500/50' },
-  yellow: { border: 'border-yellow-400', bg: 'bg-yellow-400', text: 'text-yellow-400', shadow: 'shadow-yellow-400/50' },
-  lime: { border: 'border-lime-500', bg: 'bg-lime-500', text: 'text-lime-500', shadow: 'shadow-lime-500/50' },
-  green: { border: 'border-green-500', bg: 'bg-green-500', text: 'text-green-500', shadow: 'shadow-green-500/50' },
-  emerald: { border: 'border-emerald-500', bg: 'bg-emerald-500', text: 'text-emerald-500', shadow: 'shadow-emerald-500/50' },
-  teal: { border: 'border-teal-500', bg: 'bg-teal-500', text: 'text-teal-500', shadow: 'shadow-teal-500/50' },
-  cyan: { border: 'border-cyan-500', bg: 'bg-cyan-500', text: 'text-cyan-500', shadow: 'shadow-cyan-500/50' },
-  sky: { border: 'border-sky-500', bg: 'bg-sky-500', text: 'text-sky-500', shadow: 'shadow-sky-500/50' },
-  blue: { border: 'border-blue-500', bg: 'bg-blue-500', text: 'text-blue-500', shadow: 'shadow-blue-500/50' },
-  indigo: { border: 'border-indigo-500', bg: 'bg-indigo-500', text: 'text-indigo-500', shadow: 'shadow-indigo-500/50' },
-  violet: { border: 'border-violet-500', bg: 'bg-violet-500', text: 'text-violet-500', shadow: 'shadow-violet-500/50' },
-  purple: { border: 'border-purple-500', bg: 'bg-purple-500', text: 'text-purple-500', shadow: 'shadow-purple-500/50' },
-  fuchsia: { border: 'border-fuchsia-500', bg: 'bg-fuchsia-500', text: 'text-fuchsia-500', shadow: 'shadow-fuchsia-500/50' },
-  pink: { border: 'border-pink-500', bg: 'bg-pink-500', text: 'text-pink-500', shadow: 'shadow-pink-500/50' },
-  rose: { border: 'border-rose-500', bg: 'bg-rose-500', text: 'text-rose-500', shadow: 'shadow-rose-500/50' },
+const PAD_COLORS: Record<string, { border: string, bg: string, text: string, shadow: string, ring: string }> = {
+  red: { border: 'border-red-500', bg: 'bg-red-500', text: 'text-red-500', shadow: 'shadow-red-500/50', ring: 'ring-red-500' },
+  orange: { border: 'border-orange-500', bg: 'bg-orange-500', text: 'text-orange-500', shadow: 'shadow-orange-500/50', ring: 'ring-orange-500' },
+  amber: { border: 'border-amber-500', bg: 'bg-amber-500', text: 'text-amber-500', shadow: 'shadow-amber-500/50', ring: 'ring-amber-500' },
+  yellow: { border: 'border-yellow-400', bg: 'bg-yellow-400', text: 'text-yellow-400', shadow: 'shadow-yellow-400/50', ring: 'ring-yellow-400' },
+  lime: { border: 'border-lime-500', bg: 'bg-lime-500', text: 'text-lime-500', shadow: 'shadow-lime-500/50', ring: 'ring-lime-500' },
+  green: { border: 'border-green-500', bg: 'bg-green-500', text: 'text-green-500', shadow: 'shadow-green-500/50', ring: 'ring-green-500' },
+  emerald: { border: 'border-emerald-500', bg: 'bg-emerald-500', text: 'text-emerald-500', shadow: 'shadow-emerald-500/50', ring: 'ring-emerald-500' },
+  teal: { border: 'border-teal-500', bg: 'bg-teal-500', text: 'text-teal-500', shadow: 'shadow-teal-500/50', ring: 'ring-teal-500' },
+  cyan: { border: 'border-cyan-500', bg: 'bg-cyan-500', text: 'text-cyan-500', shadow: 'shadow-cyan-500/50', ring: 'ring-cyan-500' },
+  sky: { border: 'border-sky-500', bg: 'bg-sky-500', text: 'text-sky-500', shadow: 'shadow-sky-500/50', ring: 'ring-sky-500' },
+  blue: { border: 'border-blue-500', bg: 'bg-blue-500', text: 'text-blue-500', shadow: 'shadow-blue-500/50', ring: 'ring-blue-500' },
+  indigo: { border: 'border-indigo-500', bg: 'bg-indigo-500', text: 'text-indigo-500', shadow: 'shadow-indigo-500/50', ring: 'ring-indigo-500' },
+  violet: { border: 'border-violet-500', bg: 'bg-violet-500', text: 'text-violet-500', shadow: 'shadow-violet-500/50', ring: 'ring-violet-500' },
+  purple: { border: 'border-purple-500', bg: 'bg-purple-500', text: 'text-purple-500', shadow: 'shadow-purple-500/50', ring: 'ring-purple-500' },
+  fuchsia: { border: 'border-fuchsia-500', bg: 'bg-fuchsia-500', text: 'text-fuchsia-500', shadow: 'shadow-fuchsia-500/50', ring: 'ring-fuchsia-500' },
+  pink: { border: 'border-pink-500', bg: 'bg-pink-500', text: 'text-pink-500', shadow: 'shadow-pink-500/50', ring: 'ring-pink-500' },
+  rose: { border: 'border-rose-500', bg: 'bg-rose-500', text: 'text-rose-500', shadow: 'shadow-rose-500/50', ring: 'ring-rose-500' },
 };
 
 export const Pad = memo(forwardRef<PadHandle, PadProps>(({ 
@@ -41,12 +44,14 @@ export const Pad = memo(forwardRef<PadHandle, PadProps>(({
   isSelected, 
   onSelectVariation, 
   onSelect,
+  onTrigger,
   onToggleMute,
+  onOpenLibrary,
   shortcutKey 
 }, ref) => {
-  const variations = ['A', 'B', 'C', 'D'];
+  const variations = ['a', 'b', 'c', 'd'];
   const containerRef = useRef<HTMLDivElement>(null);
-  const overlayRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const mainButtonRef = useRef<HTMLButtonElement>(null);
   
   // Long Press Refs
   const timeoutRef = useRef<number | null>(null);
@@ -56,53 +61,58 @@ export const Pad = memo(forwardRef<PadHandle, PadProps>(({
 
   useImperativeHandle(ref, () => ({
     trigger: (playedVariation: number) => {
-      const overlay = overlayRefs.current[playedVariation];
-      if (overlay) {
-          overlay.classList.remove('animate-flash-fade');
-          void overlay.offsetWidth; // Minimal reflow
-          overlay.classList.add('animate-flash-fade');
-      }
-      
-      if (containerRef.current) {
-        containerRef.current.classList.remove('animate-pad-press');
-        void containerRef.current.offsetWidth;
-        containerRef.current.classList.add('animate-pad-press');
+      if (mainButtonRef.current) {
+          mainButtonRef.current.classList.remove('animate-pad-press');
+          // Use RequestAnimationFrame to avoid synchronous reflow and allow audio to process
+          requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                  if (mainButtonRef.current) mainButtonRef.current.classList.add('animate-pad-press');
+              });
+          });
       }
     }
   }));
 
-  const handlePointerDown = (e: React.PointerEvent, index: number) => {
-      e.preventDefault(); // Prevent scrolling/ghost clicks
-      
-      // IMMEDIATE TRIGGER for responsiveness
-      onSelect(track.id); 
+  const handleVariationClick = (index: number, e: React.PointerEvent) => {
+      e.stopPropagation(); 
+      // Ensure we don't trigger the main select if clicking the variation buttons
+      onSelect(track.id);
       onSelectVariation(track.id, index);
+  };
+
+  const handleMainDown = (e: React.PointerEvent) => {
+      // Audio Trigger First
+      onTrigger(track.id); 
+      onSelect(track.id);
+      
+      // Visual Feedback
+      if (mainButtonRef.current) {
+          mainButtonRef.current.classList.remove('animate-pad-press');
+          requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                 if (mainButtonRef.current) mainButtonRef.current.classList.add('animate-pad-press');
+              });
+          });
+      }
 
       isLongPress.current = false;
-      
-      // Start Long Press Timer (1000ms) for Mute functionality
-      // Sound still plays on touch, which is standard performance behavior
       timeoutRef.current = window.setTimeout(() => {
           isLongPress.current = true;
           onToggleMute(track.id);
-          // Haptic feedback if available
           if (navigator.vibrate) navigator.vibrate(50);
-      }, 1000);
+      }, 800);
   };
 
-  const handlePointerUp = (e: React.PointerEvent, index: number) => {
+  const handleMainUp = () => {
       if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
       }
   };
 
-  const handlePointerLeave = () => {
-      // Cancel if user slides off
-      if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-      }
+  const handleLibraryPointerDown = (e: React.PointerEvent) => {
+      e.stopPropagation();
+      onOpenLibrary(track.id);
   };
 
   return (
@@ -111,110 +121,81 @@ export const Pad = memo(forwardRef<PadHandle, PadProps>(({
       className={`
         relative w-full aspect-square rounded-[4px] shadow-[0_3px_0_rgba(0,0,0,0.3)] 
         overflow-hidden select-none touch-none
-        border-[3px] active:scale-[0.98] transition-transform duration-75
-        ${styles.border} /* Colored border all around */
-        ${isSelected ? 'bg-neutral-500 ring-1 ring-white/30' : 'bg-neutral-600'} /* Lighter backgrounds */
+        border-[2px]
+        ${styles.border} 
+        bg-neutral-900
       `}
     >
-      <style>{`
-        @keyframes flashFade {
-            0% { opacity: 0.8; }
-            100% { opacity: 0; }
-        }
-        .animate-flash-fade {
-            animation: flashFade 200ms ease-out forwards;
-        }
-        @keyframes padPress {
-            0% { transform: scale(0.98); filter: brightness(1.1); }
-            100% { transform: scale(1); filter: brightness(1); }
-        }
-        .animate-pad-press {
-            animation: padPress 100ms ease-out forwards;
-        }
-      `}</style>
-      
-      {/* Tint Overlay to make color identifiable on the body too */}
-      <div className={`absolute inset-0 opacity-[0.08] pointer-events-none ${styles.bg}`}></div>
+      {/* 4 CORNER BUTTONS FOR VARIATIONS (Background Layer - No Gaps) */}
+      {variations.map((label, i) => (
+         <button
+            key={i}
+            onPointerDown={(e) => handleVariationClick(i, e)}
+            className={`
+                absolute w-[50%] h-[50%] flex text-[10px] font-bold transition-colors duration-75 z-0 cursor-pointer
+                ${track.variation === i ? `${styles.text} bg-white/10` : 'text-neutral-600 hover:text-neutral-400 hover:bg-white/5 active:bg-white/20'}
+                ${i === 0 ? 'top-0 left-0 items-start justify-start pl-2 pt-2' : ''}
+                ${i === 1 ? 'top-0 right-0 items-start justify-end pr-2 pt-2' : ''}
+                ${i === 2 ? 'bottom-0 left-0 items-end justify-start pl-2 pb-2' : ''}
+                ${i === 3 ? 'bottom-0 right-0 items-end justify-end pr-2 pb-2' : ''}
+            `}
+         >
+             {label}
+         </button>
+      ))}
 
-      {/* 2x2 Grid for Variations */}
-      <div className="w-full h-full grid grid-cols-2 grid-rows-2 relative z-10">
-        {variations.map((label, i) => {
-            const isVarActive = track.variation === i;
-            
-            // Create crosshair separation lines
-            const borderClass = `
-                border-black/20
-                ${(i === 0 || i === 2) ? 'border-r' : ''}
-                ${(i === 0 || i === 1) ? 'border-b' : ''}
-            `;
+      {/* MAIN TRIGGER AREA (Compact Center Square - 46% area - easy to hit corners) */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[46%] h-[46%] z-10 flex items-center justify-center pointer-events-none"> 
+          <button
+             ref={mainButtonRef}
+             onPointerDown={handleMainDown}
+             onPointerUp={handleMainUp}
+             onPointerLeave={handleMainUp}
+             className={`
+                pointer-events-auto
+                w-full h-full rounded-[4px] shadow-lg flex flex-col items-center justify-center relative
+                transition-all active:scale-95 cursor-pointer
+                ${isSelected 
+                    ? `${styles.bg} text-white ring-2 ring-white/20 border-0` 
+                    : `bg-neutral-800 ${styles.text} border-[2px] ${styles.border}`}
+                ${track.muted ? 'opacity-40 grayscale' : ''}
+             `}
+          >
+              {/* Label */}
+              <span className={`
+                font-black font-mono text-[9px] sm:text-[10px] uppercase tracking-tighter leading-none text-center px-0.5
+                truncate w-full drop-shadow-md
+              `}>
+                  {track.name}
+              </span>
+              
+              {/* Muted Overlay Text */}
+              {track.muted && (
+                  <span className="absolute text-[9px] font-black text-red-500 bg-black/80 px-1 rotate-12 border border-red-500 z-20">MUTE</span>
+              )}
 
-            return (
-                <div
-                    key={i}
-                    onPointerDown={(e) => handlePointerDown(e, i)}
-                    onPointerUp={(e) => handlePointerUp(e, i)}
-                    onPointerLeave={handlePointerLeave}
-                    className={`
-                        relative group flex items-center justify-center
-                        outline-none cursor-pointer
-                        ${borderClass}
-                        ${isVarActive ? 'bg-white/10' : 'bg-transparent'}
-                        hover:bg-white/5 transition-colors
-                    `}
-                >
-                     {/* Variation Indicator Dot */}
-                     {isVarActive && (
-                        <div className={`w-2 h-2 rounded-full ${styles.bg} shadow-[0_0_6px_currentColor]`}></div>
-                     )}
+              {/* Library Selector - Bottom Right Corner */}
+              <div 
+                onPointerDown={handleLibraryPointerDown}
+                className={`
+                    absolute -bottom-1 -right-1 w-6 h-6 flex items-center justify-center cursor-pointer 
+                    rounded-tl-md hover:bg-white/20 transition-colors
+                    ${isSelected ? 'text-white/70' : styles.text}
+                `}
+              >
+                  <ChevronDownIcon className="w-3 h-3 relative z-10" />
+              </div>
 
-                     {/* Subtle Label on Hover */}
-                     <span className="absolute top-0.5 left-1 text-[8px] font-mono text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {label}
-                     </span>
-                    
-                    {/* Flash Overlay - True Color Flash (No Mix Blend) */}
-                    <div 
-                        ref={el => { overlayRefs.current[i] = el }}
-                        className={`absolute inset-0 ${styles.bg} opacity-0 pointer-events-none`} 
-                    />
-                </div>
-            )
-        })}
+          </button>
       </div>
 
-      {/* Mute Overlay - Strong Visual Feedback */}
-      {track.muted && (
-         <div className="absolute inset-0 z-30 bg-neutral-900/80 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
-             <div className="border-2 border-red-500 text-red-500 font-black text-sm px-2 py-0.5 transform -rotate-12 shadow-[0_0_10px_rgba(239,68,68,0.5)]">
-                 MUTED
-             </div>
-         </div>
-      )}
-
-      {/* Center Label - MAXIMIZED SIZE */}
-      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-1 z-20">
-          <span className={`
-            font-black font-mono text-sm sm:text-base lg:text-lg uppercase tracking-tighter px-2 py-1 rounded-[2px] 
-            bg-neutral-900/60 backdrop-blur-[1px] border border-white/5 text-center leading-none
-            ${isSelected ? 'text-white' : 'text-neutral-200'}
-            ${track.muted ? 'opacity-20' : 'opacity-100'}
-          `}>
-            {track.name}
-          </span>
-      </div>
-
-      {/* Corner Badges */}
-      <div className="absolute bottom-1 right-1.5 pointer-events-none z-20">
-         <span className={`text-xs font-black ${styles.text} opacity-100 drop-shadow-md`}>
-            {variations[track.variation]}
-         </span>
-      </div>
-
-      <div className="absolute top-1 left-1.5 pointer-events-none z-20">
-         <span className="text-[10px] font-mono font-bold text-neutral-400 bg-black/30 px-1.5 rounded">
+      {/* Key Shortcut Badge */}
+      <div className="absolute top-0.5 left-1 pointer-events-none z-20">
+         <span className="text-[8px] font-mono font-bold text-neutral-500 opacity-60">
             {shortcutKey.toUpperCase()}
          </span>
       </div>
+
     </div>
   );
 }));

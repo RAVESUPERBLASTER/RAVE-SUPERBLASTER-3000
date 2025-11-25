@@ -1,5 +1,6 @@
 
 import React, { memo, useRef, useEffect, useState } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/solid';
 
 interface LCDDisplayProps {
   bpm: number;
@@ -13,14 +14,17 @@ interface LCDDisplayProps {
   sampleStart?: number;
   sampleEnd?: number;
   isSampling?: boolean;
+  isStretch?: boolean;
   onSampleUpdate?: (start: number, end: number) => void;
+  onClearSample?: () => void;
   recordingAnalyser?: AnalyserNode | null;
+  isTrackEmpty?: boolean;
 }
 
 export const LCDDisplay = memo(({ 
   bpm, patternName, isPlaying, isRecording, statusMessage, metronomeEnabled, 
-  sampleBuffer, previewBuffer, sampleStart = 0, sampleEnd = 1, isSampling, onSampleUpdate,
-  recordingAnalyser
+  sampleBuffer, previewBuffer, sampleStart = 0, sampleEnd = 1, isSampling, isStretch, onSampleUpdate, onClearSample,
+  recordingAnalyser, isTrackEmpty
 }: LCDDisplayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(null);
@@ -28,6 +32,22 @@ export const LCDDisplay = memo(({
   
   // Interaction State
   const [dragging, setDragging] = useState<'start' | 'end' | null>(null);
+  
+  // Independent Dance Move States
+  const [danceMoves, setDanceMoves] = useState({ body: 0, arms: 0, legs: 0 });
+
+  // Randomize dance moves when play starts
+  useEffect(() => {
+    if (isPlaying) {
+      setDanceMoves({
+          body: Math.floor(Math.random() * 3),
+          arms: Math.floor(Math.random() * 3),
+          legs: Math.floor(Math.random() * 3)
+      });
+    } else {
+      setDanceMoves({ body: 0, arms: 0, legs: 0 });
+    }
+  }, [isPlaying]);
 
   // Waveform Drawer Loop
   useEffect(() => {
@@ -42,7 +62,7 @@ export const LCDDisplay = memo(({
 
         // GRID BACKGROUND
         ctx.strokeStyle = 'rgba(38, 56, 41, 0.1)';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 0.5; // Thinner grid
         ctx.beginPath();
         const cw = canvas.width;
         const ch = canvas.height;
@@ -56,7 +76,7 @@ export const LCDDisplay = memo(({
             const dataArray = new Uint8Array(bufferLength);
             recordingAnalyser.getByteTimeDomainData(dataArray);
 
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1; // Thinner line
             ctx.strokeStyle = '#263829';
             ctx.beginPath();
 
@@ -81,10 +101,11 @@ export const LCDDisplay = memo(({
             ctx.fillText("RECORDING...", cw/2, 30);
 
         } else {
-            // STATIC WAVEFORM (Sample or Synth Preview)
+            // STATIC WAVEFORM (Sample OR Synth Preview)
+            // Use previewBuffer as the visual source regardless of whether it's a custom sample or not
             const bufferToDraw = sampleBuffer || previewBuffer;
             
-            if (bufferToDraw) {
+            if (bufferToDraw && !isTrackEmpty) {
                 const data = bufferToDraw.getChannelData(0);
                 // Downsample for display performance
                 const step = Math.ceil(data.length / cw);
@@ -92,7 +113,7 @@ export const LCDDisplay = memo(({
 
                 ctx.beginPath();
                 ctx.strokeStyle = '#263829';
-                ctx.lineWidth = 1.5;
+                ctx.lineWidth = 0.8; // Thinner line for detail
 
                 for (let i = 0; i < cw; i++) {
                     let min = 1.0;
@@ -113,19 +134,45 @@ export const LCDDisplay = memo(({
                 }
                 ctx.stroke();
 
-                // Draw Trim Markers (Only for custom samples)
+                // Draw Trim Markers (Only if custom sample)
                 if (sampleBuffer) {
                     const startX = sampleStart * cw;
                     const endX = sampleEnd * cw;
 
+                    // Dim out the trimmed areas
                     ctx.fillStyle = 'rgba(38, 56, 41, 0.4)';
                     ctx.fillRect(0, 0, startX, ch);
                     ctx.fillRect(endX, 0, cw - endX, ch);
 
+                    // Vertical Lines - Thinner (1px)
                     ctx.fillStyle = '#263829';
-                    ctx.fillRect(startX - 1, 0, 2, ch); 
-                    ctx.fillRect(endX - 1, 0, 2, ch); 
+                    ctx.fillRect(startX, 0, 1, ch); 
+                    ctx.fillRect(endX, 0, 1, ch); 
+                    
+                    // Draw Handles (Triangles at bottom)
+                    ctx.beginPath();
+                    // Start Handle (Right pointing)
+                    ctx.moveTo(startX, ch);
+                    ctx.lineTo(startX, ch - 15);
+                    ctx.lineTo(startX + 12, ch);
+                    ctx.fill();
+
+                    // End Handle (Left pointing)
+                    ctx.beginPath();
+                    ctx.moveTo(endX, ch);
+                    ctx.lineTo(endX, ch - 15);
+                    ctx.lineTo(endX - 12, ch);
+                    ctx.fill();
+
+                    // Handle Labels
+                    ctx.font = '10px "VT323"';
+                    ctx.fillStyle = '#263829';
+                    ctx.textAlign = 'left';
+                    ctx.fillText("START", startX + 4, ch - 18);
+                    ctx.textAlign = 'right';
+                    ctx.fillText("END", endX - 4, ch - 18);
                 }
+                
             } else {
                  // EMPTY STATE
                  ctx.fillStyle = 'rgba(38, 56, 41, 0.3)';
@@ -146,28 +193,36 @@ export const LCDDisplay = memo(({
     return () => {
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [sampleBuffer, previewBuffer, sampleStart, sampleEnd, isSampling, recordingAnalyser]);
+  }, [sampleBuffer, previewBuffer, sampleStart, sampleEnd, isSampling, recordingAnalyser, isTrackEmpty]);
 
   // Handle Interaction for Waveform (Left Panel)
   const handleWaveformDown = (e: React.PointerEvent) => {
+      // Prevent dragging if clicking the delete button (handled by stopPropagation, but safety check here)
+      if ((e.target as HTMLElement).closest('button')) return;
+
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const cw = rect.width;
-      const pX = x / cw;
+      
+      // Always allow editing if onSampleUpdate is provided
+      if (onSampleUpdate && sampleBuffer) {
+          const startX = sampleStart * cw;
+          const endX = sampleEnd * cw;
+          
+          // Pixel distance threshold for grabbing handles
+          const HIT_THRESHOLD = 30;
+          
+          const distStart = Math.abs(x - startX);
+          const distEnd = Math.abs(x - endX);
 
-      // Check for Trim Handles (only if custom sample)
-      if (sampleBuffer && onSampleUpdate) {
-          const threshold = 0.15; 
-          const distStart = Math.abs(pX - sampleStart);
-          const distEnd = Math.abs(pX - sampleEnd);
-
-          if (distStart < threshold && distStart <= distEnd) {
+          if (distStart < HIT_THRESHOLD && distStart <= distEnd) {
               setDragging('start');
-          } else if (distEnd < threshold) {
+              e.currentTarget.setPointerCapture(e.pointerId);
+          } else if (distEnd < HIT_THRESHOLD) {
               setDragging('end');
+              e.currentTarget.setPointerCapture(e.pointerId);
           }
-          e.currentTarget.setPointerCapture(e.pointerId);
       }
   };
 
@@ -194,12 +249,15 @@ export const LCDDisplay = memo(({
       e.currentTarget.releasePointerCapture(e.pointerId);
   };
   
+  // Show delete if not sampling and track is not empty
+  const showDelete = onClearSample && !isSampling && !isTrackEmpty;
+
   return (
     <div 
       className={`
         bg-[#98b09a] border-4 border-[#6f8270] rounded-sm p-1 font-['VT323'] 
         shadow-[inset_0_0_20px_rgba(0,0,0,0.15)] relative overflow-hidden 
-        h-56 w-full select-none transition-colors duration-100 flex flex-col
+        h-full w-full select-none transition-colors duration-100 flex flex-col
         ${isPlaying ? 'animate-lcd-pulse' : ''}
       `}
       style={{ '--beat': beatDuration } as React.CSSProperties}
@@ -209,53 +267,106 @@ export const LCDDisplay = memo(({
           0%, 100% { background-color: #98b09a; }
           50% { background-color: #a0b8a2; }
         }
-        .animate-lcd-pulse { animation: lcdPulse 0.1s infinite; }
+        .animate-lcd-pulse { animation: lcdPulse var(--beat) infinite; }
 
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         .animate-blink { animation: blink 0.5s step-end infinite; }
 
+        /* VINTAGE WASHING MACHINE SHAKE */
         @keyframes violentShake {
-          0% { transform: translate(0, 0); }
-          25% { transform: translate(1px, 1px); }
-          50% { transform: translate(-1px, -1px); }
-          75% { transform: translate(1px, -1px); }
-          100% { transform: translate(0, 0); }
+          0% { transform: translate(0, 0) rotate(0deg); }
+          25% { transform: translate(2px, 2px) rotate(1deg); }
+          50% { transform: translate(-2px, -2px) rotate(-1deg); }
+          75% { transform: translate(2px, -2px) rotate(0deg); }
+          100% { transform: translate(0, 0) rotate(0deg); }
         }
-        .animate-violent-shake { animation: violentShake 0.1s linear infinite; }
+        .animate-violent-shake { animation: violentShake calc(var(--beat) / 4) linear infinite; }
 
         @keyframes spinSlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spinSlow 4s linear infinite; }
+        .animate-spin-slow { animation: spinSlow calc(var(--beat) * 4) linear infinite; }
 
-        @keyframes brickTumble {
-           0% { transform: rotate(0deg) translate(0px, 0px); }
-           20% { transform: rotate(70deg) translate(13px, 0px); }
-           50% { transform: rotate(180deg) translate(13px, 0px); }
-           75% { transform: rotate(270deg) translate(13px, 0px); }
-           100% { transform: rotate(360deg) translate(0px, 0px); }
+        @keyframes brickViolent {
+           0% { transform: rotate(0deg) translate(0px, 14px); } 
+           25% { transform: rotate(90deg) translate(-10px, 0px); }
+           50% { transform: rotate(180deg) translate(0px, -10px); }
+           75% { transform: rotate(270deg) translate(10px, 0px); }
+           100% { transform: rotate(360deg) translate(0px, 14px); }
         }
-        .animate-brick-tumble { animation: brickTumble 0.6s linear infinite; }
+        .animate-brick-violent { animation: brickViolent calc(var(--beat) * 2) linear infinite; }
 
-        @keyframes bounceBody { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-        .animate-bounce-body { animation: bounceBody 0.4s ease-in-out infinite; }
+        /* --- BODY MOVES --- */
+        @keyframes bodyBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+        .animate-body-0 { animation: bodyBob var(--beat) ease-in-out infinite; }
+        
+        @keyframes bodySway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+        .animate-body-1 { transform-origin: 50px 90px; animation: bodySway calc(var(--beat) * 2) ease-in-out infinite; }
+        
+        @keyframes bodyPump { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.95) translateY(5px); } }
+        .animate-body-2 { transform-origin: 50px 130px; animation: bodyPump var(--beat) ease-in-out infinite; }
 
-        @keyframes waveArms { 0%, 100% { stroke-width: 3; } 50% { stroke-width: 5; d: path("M 20 50 Q 50 80 80 50"); } }
-        .animate-wave-arms { animation: waveArms 0.4s ease-in-out infinite; }
+        /* --- ARM MOVES --- */
+        @keyframes armWave { 
+            0%, 100% { d: path("M -30 10 Q 0 -5 30 10"); } 
+            50% { d: path("M -30 -10 Q 0 15 30 -10"); } 
+        }
+        .animate-arm-wave { animation: armWave var(--beat) ease-in-out infinite; }
 
-        @keyframes spinRave { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-rave { animation: spinRave 2s linear infinite; }
+        @keyframes armFlap { 
+            0%, 100% { transform: rotate(0deg); } 
+            50% { transform: rotate(20deg); } 
+        }
+        .animate-arm-flap { transform-origin: 0 0; animation: armFlap calc(var(--beat) / 2) ease-in-out infinite; }
+
+        @keyframes armPumpL { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-30deg); } }
+        .animate-arm-pump-l { transform-origin: 0 0; animation: armPumpL var(--beat) ease-in-out infinite; }
+        @keyframes armPumpR { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(30deg); } }
+        .animate-arm-pump-r { transform-origin: 0 0; animation: armPumpR var(--beat) ease-in-out infinite; }
+
+        /* --- LEG MOVES --- */
+        @keyframes legBounce { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.85); } }
+        .animate-legs-bounce { transform-origin: 0 0; animation: legBounce var(--beat) ease-in-out infinite; }
+
+        @keyframes legRunL { 0%, 100% { transform: rotate(15deg); } 50% { transform: rotate(-15deg); } }
+        .animate-leg-run-l { transform-origin: 0 0; animation: legRunL var(--beat) linear infinite; }
+        @keyframes legRunR { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(15deg); } }
+        .animate-leg-run-r { transform-origin: 0 0; animation: legRunR var(--beat) linear infinite; }
+        
+        @keyframes legCross { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-0.5); } }
+        .animate-legs-cross { transform-origin: 0 0; animation: legCross calc(var(--beat) * 2) ease-in-out infinite; }
+
+        /* HEAD BOB - ATTACHED - Simple vertical bob to ensure attachment */
+        @keyframes headBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(2px); }
+        }
+        .animate-head-bob { 
+            animation: headBob var(--beat) ease-in-out infinite; 
+        }
+        
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-marquee { animation: marquee calc(var(--beat) * 8) linear infinite; }
+
+        /* LITTLE DANCE FOR X BUTTON */
+        @keyframes wiggle {
+          0%, 100% { transform: rotate(-5deg) scale(1); }
+          50% { transform: rotate(5deg) scale(1.1); }
+        }
+        .animate-wiggle { animation: wiggle var(--beat) ease-in-out infinite; }
+
       `}</style>
 
       {/* LCD Background Texture */}
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/pixel-weave.png')] opacity-20 pointer-events-none mix-blend-multiply z-0"></div>
       
       {/* HEADER ROW */}
-      <div className="relative z-10 flex justify-between items-start px-2 pt-1 border-b border-[#263829]/10 pb-1">
+      <div className="relative z-10 flex justify-between items-start px-2 pt-1 border-b border-[#263829]/10 pb-1 h-10 shrink-0">
            <div className="flex flex-col leading-none">
                <span className="text-lg font-bold opacity-70">PTN: {patternName}</span>
                <div className="flex gap-2 mt-1 text-sm">
                    <span className={isRecording ? "animate-blink bg-[#263829] text-[#98b09a] px-1" : "opacity-30"}>REC</span>
                    <span className={isPlaying ? "bg-[#263829] text-[#98b09a] px-1" : "opacity-30"}>PLAY</span>
                    {metronomeEnabled && <span className="border border-[#263829] px-1">CLICK</span>}
+                   {isStretch && <span className="bg-[#263829] text-[#98b09a] px-1 animate-pulse">STRETCH</span>}
                </div>
            </div>
            <div className="flex flex-col items-end leading-none">
@@ -264,8 +375,8 @@ export const LCDDisplay = memo(({
            </div>
       </div>
 
-      {/* MAIN SPLIT DISPLAY - SIMPLIFIED */}
-      <div className="relative z-10 flex-1 flex overflow-hidden">
+      {/* MAIN SPLIT DISPLAY */}
+      <div className="relative z-10 flex-1 flex overflow-hidden h-full min-h-0">
            
            {/* LEFT: WAVEFORM EDITOR (Expanded) */}
            <div 
@@ -276,68 +387,141 @@ export const LCDDisplay = memo(({
                 onPointerLeave={handlePointerUp}
            >
                 <div className="absolute top-0 left-0 bg-[#263829] text-[#98b09a] text-[8px] px-1.5 py-0.5 z-20 pointer-events-none font-bold tracking-widest">
-                    {sampleBuffer ? 'SAMPLE EDITOR' : 'SYNTH PREVIEW'}
+                    {sampleBuffer ? (isStretch ? 'SAMPLE [GRANULAR MODE]' : 'SAMPLE EDITOR') : 'SYNTH TRIM'}
                 </div>
                 
-                <canvas ref={canvasRef} width={400} height={140} className="w-full h-full cursor-crosshair touch-none" />
+                {/* DELETE BUTTON FOR SAMPLE OR INSTRUMENT */}
+                {showDelete && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); if (onClearSample) onClearSample(); }}
+                        className={`
+                            absolute top-1 right-1 z-30 w-5 h-5 flex items-center justify-center rounded-[2px]
+                            bg-[#263829] text-[#98b09a] border border-[#98b09a]/20 hover:bg-red-900 hover:text-white transition-colors
+                            ${isPlaying ? 'animate-wiggle' : ''}
+                        `}
+                        title="Delete/Clear Sound"
+                    >
+                        <XMarkIcon className="w-3 h-3" />
+                    </button>
+                )}
+
+                <canvas ref={canvasRef} width={400} height={140} className="w-full h-full cursor-col-resize touch-none" />
                 
-                {/* Floating Info for Sample Handles */}
-                {sampleBuffer && !isSampling && (
-                     <div className="absolute bottom-0 w-full flex justify-between px-1 pointer-events-none">
-                         <span className="text-[8px] font-bold bg-[#263829]/80 text-[#98b09a] px-1 rounded-tl-sm">S: {Math.round(sampleStart * 100)}</span>
-                         <span className="text-[8px] font-bold bg-[#263829]/80 text-[#98b09a] px-1 rounded-tr-sm">E: {Math.round(sampleEnd * 100)}</span>
+                {/* Floating Info for Sample Handles - ALWAYS VISIBLE if active */}
+                {!isSampling && sampleBuffer && (
+                     <div className="absolute bottom-0 w-full flex justify-between px-1 pointer-events-none opacity-50">
+                         <span className="text-[8px] font-bold text-[#263829]">{Math.round(sampleStart * 100)}%</span>
+                         <span className="text-[8px] font-bold text-[#263829]">{Math.round(sampleEnd * 100)}%</span>
                      </div>
                 )}
            </div>
 
            {/* RIGHT: ANIMATIONS */}
-           <div className="flex-[2] h-full flex items-center justify-center gap-2 sm:gap-4 px-2 overflow-hidden bg-[#263829]/5">
+           <div className="flex-[2] h-full flex items-end justify-center gap-0.5 px-2 overflow-hidden bg-[#263829]/5 pb-1">
                
-                {/* ANIMATION 1: THE VINTAGE WASHING MACHINE */}
-                <div className={`relative flex-shrink-0 w-10 h-14 border-2 border-[#263829] rounded-sm flex flex-col items-center justify-start bg-[#98b09a] ${isPlaying ? 'animate-violent-shake' : ''} hidden sm:flex`}>
-                    <div className="w-full h-3 border-b-2 border-[#263829] flex items-center justify-between px-1 bg-[#263829]/10">
+                {/* ANIMATION 1: THE VINTAGE WASHING MACHINE - SCALED DOWN */}
+                <div className={`
+                    relative flex-shrink-0 w-16 h-20 mb-3
+                    border-2 border-[#263829] rounded-[2px] 
+                    flex flex-col items-center justify-start bg-[#98b09a] 
+                    ${isPlaying ? 'animate-violent-shake' : ''} 
+                    hidden sm:flex
+                `}>
+                    <div className="w-full h-4 border-b-2 border-[#263829] flex items-center justify-between px-1 bg-[#263829]/10">
                         <div className="flex gap-0.5">
-                            <div className="w-0.5 h-0.5 bg-[#263829] rounded-full"></div>
+                            <div className="w-1 h-1 bg-[#263829] rounded-full"></div>
+                            <div className="w-1 h-1 bg-[#263829] rounded-full"></div>
                         </div>
-                        <div className={`w-1.5 h-1.5 rounded-full border border-[#263829] relative ${isPlaying ? 'animate-spin-slow' : ''}`}>
-                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1px] h-0.5 bg-[#263829]"></div>
+                        <div className={`w-2.5 h-2.5 rounded-full border border-[#263829] relative ${isPlaying ? 'animate-spin-slow' : ''}`}>
+                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1px] h-1.5 bg-[#263829]"></div>
                         </div>
                     </div>
                     <div className="flex-1 w-full flex items-center justify-center relative">
-                        <div className="w-6 h-6 rounded-full border-2 border-[#263829] flex items-center justify-center overflow-hidden bg-[#263829]/5">
-                             <div className={`w-2 h-1.5 bg-[#263829] absolute ${isPlaying ? 'animate-brick-tumble' : ''}`}></div>
+                        <div className="w-12 h-12 rounded-full border-2 border-[#263829] flex items-center justify-center overflow-hidden bg-[#263829]/5 relative">
+                             {/* THE BRICK */}
+                             <div className={`
+                                 w-6 h-4 bg-[#263829] absolute rounded-[1px]
+                                 ${isPlaying ? 'animate-brick-violent' : 'translate-y-[14px] rotate-6'}
+                             `}></div>
                         </div>
                     </div>
                 </div>
 
-                {/* ANIMATION 2: RAVE STICKMAN */}
-                <div className="relative flex-shrink-0 w-12 h-16 flex items-end justify-center -mb-2">
-                    <svg viewBox="0 0 100 150" className="h-full w-full overflow-visible drop-shadow-sm">
-                        <g className={isPlaying ? "animate-bounce-body" : ""}>
-                            <circle cx="50" cy="30" r="10" fill="none" stroke="#263829" strokeWidth="4" />
-                            <line x1="50" y1="40" x2="50" y2="90" stroke="#263829" strokeWidth="4" />
-                            <path d="M 20 60 Q 50 50 80 60" fill="none" stroke="#263829" strokeWidth="4" className={isPlaying ? "animate-wave-arms" : ""} />
-                            <line x1="50" y1="90" x2="30" y2="130" stroke="#263829" strokeWidth="4" />
-                            <line x1="50" y1="90" x2="70" y2="130" stroke="#263829" strokeWidth="4" />
+                {/* ANIMATION 2: RAVE STICKMAN WITH ACID SMILEY (UPDATED) */}
+                <div className="relative flex-shrink-0 h-full flex items-end justify-center pb-2">
+                    <svg viewBox="0 0 100 150" className="h-full w-auto max-w-full overflow-visible drop-shadow-sm">
+                        {/* MAIN BODY CONTAINER - Random Move 0, 1, 2 */}
+                        <g className={isPlaying ? `animate-body-${danceMoves.body}` : ""}>
+                            
+                            {/* ACID SMILEY HEAD - Attached at top of torso (50, 30) */}
+                            {/* Simplified transform to just translation to avoid detaching */}
+                            <g transform="translate(50, 30)">
+                                <g className={isPlaying ? "animate-head-bob" : ""}>
+                                    <circle cx="0" cy="0" r="14" fill="none" stroke="#263829" strokeWidth="2.5" />
+                                    <ellipse cx="-5" cy="-3" rx="2" ry="3.5" fill="#263829" />
+                                    <ellipse cx="5" cy="-3" rx="2" ry="3.5" fill="#263829" />
+                                    <path d="M -7 5 Q 0 10 7 5" fill="none" stroke="#263829" strokeWidth="2" strokeLinecap="round" />
+                                </g>
+                            </g>
+
+                            {/* TORSO */}
+                            <line x1="50" y1="44" x2="50" y2="90" stroke="#263829" strokeWidth="3" />
+                            
+                            {/* ARMS - Attached at Shoulders (50, 55) */}
+                            <g transform="translate(50, 55)">
+                                {danceMoves.arms === 0 && (
+                                     // Wave (Path Morph)
+                                     <path d="M -30 10 Q 0 -5 30 10" fill="none" stroke="#263829" strokeWidth="3" className={isPlaying ? "animate-arm-wave" : ""} />
+                                )}
+                                {danceMoves.arms === 1 && (
+                                     // Flap (Rotation Group)
+                                     <g className={isPlaying ? "animate-arm-flap" : ""}>
+                                         <line x1="0" y1="0" x2="-30" y2="-10" stroke="#263829" strokeWidth="3" />
+                                         <line x1="0" y1="0" x2="30" y2="-10" stroke="#263829" strokeWidth="3" />
+                                     </g>
+                                )}
+                                {danceMoves.arms === 2 && (
+                                     // Alternating Pump
+                                     <g>
+                                         <line x1="0" y1="0" x2="-25" y2="10" stroke="#263829" strokeWidth="3" className={isPlaying ? "animate-arm-pump-l" : ""} />
+                                         <line x1="0" y1="0" x2="25" y2="10" stroke="#263829" strokeWidth="3" className={isPlaying ? "animate-arm-pump-r" : ""} />
+                                     </g>
+                                )}
+                            </g>
+                            
+                            {/* LEGS - Attached at Hips (50, 90) */}
+                            <g transform="translate(50, 90)">
+                                {danceMoves.legs === 0 && (
+                                    // Bounce / Stand
+                                    <g className={isPlaying ? "animate-legs-bounce" : ""}>
+                                        <line x1="0" y1="0" x2="-20" y2="40" stroke="#263829" strokeWidth="3" />
+                                        <line x1="0" y1="0" x2="20" y2="40" stroke="#263829" strokeWidth="3" />
+                                    </g>
+                                )}
+                                {danceMoves.legs === 1 && (
+                                    // Running Man
+                                    <g>
+                                        <line x1="0" y1="0" x2="-20" y2="40" stroke="#263829" strokeWidth="3" className={isPlaying ? "animate-leg-run-l" : ""} />
+                                        <line x1="0" y1="0" x2="20" y2="40" stroke="#263829" strokeWidth="3" className={isPlaying ? "animate-leg-run-r" : ""} />
+                                    </g>
+                                )}
+                                {danceMoves.legs === 2 && (
+                                    // Cross / Wide
+                                    <g className={isPlaying ? "animate-legs-cross" : ""}>
+                                        <line x1="0" y1="0" x2="-20" y2="40" stroke="#263829" strokeWidth="3" />
+                                        <line x1="0" y1="0" x2="20" y2="40" stroke="#263829" strokeWidth="3" />
+                                    </g>
+                                )}
+                            </g>
                         </g>
                     </svg>
-                </div>
-
-                {/* ANIMATION 3: ACID SMILEY */}
-                <div className={`relative flex-shrink-0 w-8 h-8 ${isPlaying ? 'animate-spin-rave' : ''}`}>
-                     <svg viewBox="0 0 100 100" className="w-full h-full filter drop-shadow-sm">
-                         <circle cx="50" cy="50" r="45" fill="none" stroke="#263829" strokeWidth="8" />
-                         <ellipse cx="32" cy="40" rx="7" ry="11" fill="#263829" />
-                         <ellipse cx="68" cy="40" rx="7" ry="11" fill="#263829" />
-                         <path d="M20 65 Q 50 95 80 65" fill="none" stroke="#263829" strokeWidth="10" strokeLinecap="round" />
-                     </svg>
                 </div>
 
            </div>
       </div>
 
       {/* FOOTER: MARQUEE */}
-      <div className="border-t border-[#263829]/20 pt-0.5 px-1 bg-[#263829]/5">
+      <div className="border-t border-[#263829]/20 pt-0.5 px-1 bg-[#263829]/5 h-5 shrink-0">
             <div className="text-xs font-mono whitespace-nowrap overflow-hidden flex">
                 <span className={isPlaying ? "animate-marquee" : ""}>
                    {statusMessage} --- {statusMessage} --- {statusMessage} ---

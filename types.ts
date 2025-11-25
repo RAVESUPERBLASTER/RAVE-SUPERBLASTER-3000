@@ -1,4 +1,20 @@
 
+export type Genre = 
+  | 'TR-909' 
+  | 'TR-808' 
+  | 'TR-707' 
+  | 'LINN-DRUM' 
+  | 'JUNGLE' 
+  | 'MEMPHIS' 
+  | 'GOA' 
+  | 'ETHNIC-WORLD' 
+  | 'GABBER' 
+  | 'ACID' 
+  | 'UK-GARAGE' 
+  | 'EURO-DANCE' 
+  | 'HARDSTYLE' 
+  | 'DUBSTEP';
+
 export enum InstrumentType {
   KICK = 'KICK',
   SNARE = 'SNARE',
@@ -16,6 +32,42 @@ export enum InstrumentType {
   RIDE = 'RIDE',
   RIMSHOT = 'RIMSHOT',
   CHORD = 'CHORD'
+}
+
+export enum MasterEffectType {
+  // BANK A (Original)
+  HALF_RATE = 'HALF_RATE',
+  DISTORTION = 'DISTORTION',
+  SQUASH = 'SQUASH',
+  ECHO_FADE = 'ECHO_FADE',
+  PITCH_LFO = 'PITCH_LFO',
+  EQ_SWEEP = 'EQ_SWEEP',
+  MEGA_MORPH = 'MEGA_MORPH',
+  PITCH_UP = 'PITCH_UP',
+  PUNCH = 'PUNCH',
+  QUANTISE_6_8 = 'QUANTISE_6_8', // Shared
+  BEAT_REPEAT = 'BEAT_REPEAT',
+  BEAT_REPEAT_FAST = 'BEAT_REPEAT_FAST',
+  FM = 'FM',
+  GRANULAR = 'GRANULAR',
+  REVERSE = 'REVERSE', // Shared
+  BOUNCING = 'BOUNCING',
+
+  // BANK B (PO Style)
+  LOOP_16 = 'LOOP_16',
+  LOOP_12 = 'LOOP_12',
+  LOOP_SHORT = 'LOOP_SHORT',
+  LOOP_SHORTER = 'LOOP_SHORTER',
+  UNISON = 'UNISON',
+  UNISON_LOW = 'UNISON_LOW',
+  OCTAVE_UP = 'OCTAVE_UP',
+  OCTAVE_DOWN = 'OCTAVE_DOWN',
+  STUTTER_4 = 'STUTTER_4',
+  STUTTER_3 = 'STUTTER_3',
+  SCRATCH = 'SCRATCH',
+  SCRATCH_FAST = 'SCRATCH_FAST',
+  RETRIGGER = 'RETRIGGER',
+  NO_EFFECT = 'NO_EFFECT'
 }
 
 export interface EffectState {
@@ -46,6 +98,27 @@ export interface SampleConfig {
   start: number; // 0 to 1 (Trim start)
   end: number;   // 0 to 1 (Trim end)
   isCustom: boolean;
+  stretch?: boolean; // Enable time-invariant pitch shifting
+}
+
+export interface SoundConfig {
+  genre: string;
+  type: InstrumentType;
+  name: string;
+}
+
+export interface UserSample {
+  id: string;
+  name: string;
+  buffer: AudioBuffer;
+  date: number;
+}
+
+export interface VariationState {
+  volume: number;
+  pan: number;
+  pitch: number;
+  effects: ChannelEffects;
 }
 
 export interface Track {
@@ -62,6 +135,27 @@ export interface Track {
   muted: boolean;
   effects: ChannelEffects;
   sample?: SampleConfig; // Optional custom sample data
+  soundConfig?: SoundConfig; // Optional override for sound engine (Mix & Match genres)
+  variationStates: VariationState[]; // Store separate mixer settings for each variation (0-3)
+}
+
+export interface TrackStateSnapshot {
+  volume: number;
+  pan: number;
+  pitch: number;
+  muted: boolean;
+  effects: ChannelEffects;
+  soundConfig?: SoundConfig;
+  sample?: SampleConfig;
+  activePatternIdx: number;
+  variation: number;
+  color: string;
+}
+
+export interface SceneData {
+  genre: string;
+  bpm: number;
+  trackStates: Record<number, TrackStateSnapshot>;
 }
 
 export interface SequencerState {

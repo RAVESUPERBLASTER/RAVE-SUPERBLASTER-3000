@@ -1,20 +1,22 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AudioSynth } from './services/audioSynth';
-import { Track, InstrumentType, ChannelEffects, PatternData, SampleConfig } from './types';
-import { Pad, PadHandle } from './components/Pad';
+import { Track, InstrumentType, ChannelEffects, PatternData, SampleConfig, MasterEffectType, UserSample, VariationState, SceneData, TrackStateSnapshot, SoundConfig } from './types';
+import { PadMix, PadMixHandle } from './components/PadMix';
 import { LCDDisplay } from './components/LCDDisplay';
 import { PitchModWheels } from './components/PitchModWheels';
 import { StepSequencer } from './components/StepSequencer';
-import { Mixer, MixerHandle } from './components/Mixer';
+import { SoundLibraryModal } from './components/SoundLibraryModal';
+import { AutomationEditor } from './components/AutomationEditor'; 
+import { LibraryItem, SOUND_LIBRARY } from './services/soundLibrary';
 import { getGenrePatterns, LEGENDARY_PATTERNS } from './services/patternLibrary';
-import { PlayIcon, StopIcon, TrashIcon, ClockIcon, ChevronLeftIcon, ChevronRightIcon, LockClosedIcon, LockOpenIcon, MicrophoneIcon, BoltIcon, ArrowsRightLeftIcon, ArrowPathIcon, ArrowUturnLeftIcon, CubeIcon } from '@heroicons/react/24/solid';
+import { PlayIcon, StopIcon, TrashIcon, ClockIcon, ChevronLeftIcon, ChevronRightIcon, LockClosedIcon, LockOpenIcon, MicrophoneIcon, BoltIcon, ArrowsRightLeftIcon, ArrowPathIcon, ArrowUturnLeftIcon, CubeIcon, SparklesIcon, Cog6ToothIcon, ChevronDownIcon, PlusIcon, Squares2X2Icon, XMarkIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
 
 // --- Configuration ---
 const INITIAL_BPM = 128;
 const STEPS = 16;
-const PATTERN_COUNT = 7; 
-const SCENE_COUNT = 9; 
+const PATTERN_COUNT = 8; 
+const SCENE_COUNT = 8; 
 
 const DEFAULT_EFFECTS: ChannelEffects = {
     reverb: { active: false, value: 0.3 },
@@ -25,36 +27,92 @@ const DEFAULT_EFFECTS: ChannelEffects = {
     glitch: { active: false, value: 0.5 }
 };
 
-const TRACK_COLORS: Record<string, string> = {
-    red: 'bg-red-600',
-    orange: 'bg-orange-500',
-    amber: 'bg-amber-500',
-    yellow: 'bg-yellow-400',
-    lime: 'bg-lime-500',
-    green: 'bg-green-600',
-    emerald: 'bg-emerald-500',
-    teal: 'bg-teal-500',
-    cyan: 'bg-cyan-500',
-    sky: 'bg-sky-500',
-    blue: 'bg-blue-600',
-    indigo: 'bg-indigo-500',
-    violet: 'bg-violet-500',
-    purple: 'bg-purple-600',
-    fuchsia: 'bg-fuchsia-500',
-    pink: 'bg-pink-500',
-    rose: 'bg-rose-500',
-    white: 'bg-white',
-};
-
 const SCENE_COLORS = [
     'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-yellow-400', 
-    'bg-lime-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-blue-600',
-    'bg-violet-500'
+    'bg-lime-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-blue-600'
+];
+
+// Master FX Configuration Data
+const FX_INFO: Record<MasterEffectType, { label: string, color: string }> = {
+  [MasterEffectType.HALF_RATE]: { label: 'HALF', color: 'bg-indigo-600' },
+  [MasterEffectType.DISTORTION]: { label: 'DIST', color: 'bg-red-600' },
+  [MasterEffectType.SQUASH]: { label: 'SQSH', color: 'bg-orange-600' },
+  [MasterEffectType.ECHO_FADE]: { label: 'ECHO', color: 'bg-cyan-600' },
+  [MasterEffectType.PITCH_LFO]: { label: 'VIBE', color: 'bg-pink-600' },
+  [MasterEffectType.EQ_SWEEP]: { label: 'SWEEP', color: 'bg-emerald-600' },
+  [MasterEffectType.MEGA_MORPH]: { label: 'MORPH', color: 'bg-purple-600' },
+  [MasterEffectType.PITCH_UP]: { label: 'RISE', color: 'bg-yellow-500' },
+  [MasterEffectType.PUNCH]: { label: 'PNCH', color: 'bg-blue-600' },
+  [MasterEffectType.QUANTISE_6_8]: { label: '6/8', color: 'bg-teal-600' },
+  [MasterEffectType.BEAT_REPEAT]: { label: 'LOOP', color: 'bg-lime-600' },
+  [MasterEffectType.BEAT_REPEAT_FAST]: { label: 'FAST', color: 'bg-green-600' },
+  [MasterEffectType.FM]: { label: 'FM', color: 'bg-fuchsia-600' },
+  [MasterEffectType.GRANULAR]: { label: 'GRAN', color: 'bg-rose-600' },
+  [MasterEffectType.REVERSE]: { label: 'REV', color: 'bg-amber-600' },
+  [MasterEffectType.BOUNCING]: { label: 'BNC', color: 'bg-sky-600' },
+  [MasterEffectType.LOOP_16]: { label: 'LP16', color: 'bg-red-500' },
+  [MasterEffectType.LOOP_12]: { label: 'LP12', color: 'bg-orange-500' },
+  [MasterEffectType.LOOP_SHORT]: { label: 'SHRT', color: 'bg-yellow-500' },
+  [MasterEffectType.LOOP_SHORTER]: { label: 'TINY', color: 'bg-lime-500' },
+  [MasterEffectType.UNISON]: { label: 'UNI', color: 'bg-cyan-500' },
+  [MasterEffectType.UNISON_LOW]: { label: 'ULO', color: 'bg-blue-600' },
+  [MasterEffectType.OCTAVE_UP]: { label: 'OCT+', color: 'bg-indigo-500' },
+  [MasterEffectType.OCTAVE_DOWN]: { label: 'OCT-', color: 'bg-violet-600' },
+  [MasterEffectType.STUTTER_4]: { label: 'STU4', color: 'bg-fuchsia-500' },
+  [MasterEffectType.STUTTER_3]: { label: 'STU3', color: 'bg-pink-500' },
+  [MasterEffectType.SCRATCH]: { label: 'SCRT', color: 'bg-rose-500' },
+  [MasterEffectType.SCRATCH_FAST]: { label: 'F.SCR', color: 'bg-red-700' },
+  [MasterEffectType.RETRIGGER]: { label: 'RTRG', color: 'bg-teal-500' },
+  [MasterEffectType.NO_EFFECT]: { label: 'OFF', color: 'bg-neutral-800' },
+};
+
+// Parameter Labels for each effect
+const FX_PARAM_DEFS: Record<MasterEffectType, { a: string, b: string }> = {
+  [MasterEffectType.HALF_RATE]: { a: 'FREQ', b: 'RES' },
+  [MasterEffectType.DISTORTION]: { a: 'TONE', b: 'DRIVE' },
+  [MasterEffectType.SQUASH]: { a: 'THRESH', b: 'MAKEUP' },
+  [MasterEffectType.ECHO_FADE]: { a: 'TIME', b: 'FDBK' },
+  [MasterEffectType.PITCH_LFO]: { a: 'RATE', b: 'DEPTH' },
+  [MasterEffectType.EQ_SWEEP]: { a: 'SPEED', b: 'RES' },
+  [MasterEffectType.MEGA_MORPH]: { a: 'RATE', b: 'Q' },
+  [MasterEffectType.PITCH_UP]: { a: 'SPEED', b: 'FDBK' },
+  [MasterEffectType.PUNCH]: { a: 'FREQ', b: 'BOOST' },
+  [MasterEffectType.QUANTISE_6_8]: { a: 'FILT', b: 'RES' },
+  [MasterEffectType.BEAT_REPEAT]: { a: 'FDBK', b: 'HPF' },
+  [MasterEffectType.BEAT_REPEAT_FAST]: { a: 'FDBK', b: 'LPF' },
+  [MasterEffectType.FM]: { a: 'MOD', b: 'FILT' },
+  [MasterEffectType.GRANULAR]: { a: 'GRAIN', b: 'FDBK' },
+  [MasterEffectType.REVERSE]: { a: 'CHOP', b: 'FILT' },
+  [MasterEffectType.BOUNCING]: { a: 'SPEED', b: 'DECAY' },
+  [MasterEffectType.LOOP_16]: { a: 'LPF', b: 'FDBK' },
+  [MasterEffectType.LOOP_12]: { a: 'HPF', b: 'FDBK' },
+  [MasterEffectType.LOOP_SHORT]: { a: 'BPF', b: 'FDBK' },
+  [MasterEffectType.LOOP_SHORTER]: { a: 'PEAK', b: 'FDBK' },
+  [MasterEffectType.UNISON]: { a: 'SPEED', b: 'DEPTH' },
+  [MasterEffectType.UNISON_LOW]: { a: 'CUTOFF', b: 'DETUNE' },
+  [MasterEffectType.OCTAVE_UP]: { a: 'HPF', b: '-' },
+  [MasterEffectType.OCTAVE_DOWN]: { a: 'LPF', b: '-' },
+  [MasterEffectType.STUTTER_4]: { a: 'FILT', b: 'RES' },
+  [MasterEffectType.STUTTER_3]: { a: 'FILT', b: 'CRUSH' },
+  [MasterEffectType.SCRATCH]: { a: 'SPEED', b: 'DEPTH' },
+  [MasterEffectType.SCRATCH_FAST]: { a: 'SPEED', b: 'DEPTH' },
+  [MasterEffectType.RETRIGGER]: { a: 'RATE', b: 'FDBK' },
+  [MasterEffectType.NO_EFFECT]: { a: '-', b: '-' },
+};
+
+const DEFAULT_FX_SLOTS: MasterEffectType[] = [
+    MasterEffectType.LOOP_16,
+    MasterEffectType.STUTTER_4,
+    MasterEffectType.PITCH_LFO,
+    MasterEffectType.OCTAVE_DOWN,
+    MasterEffectType.DISTORTION,
+    MasterEffectType.EQ_SWEEP,
+    MasterEffectType.REVERSE,
+    MasterEffectType.PUNCH
 ];
 
 const GENRES = ['TR-909', 'TR-808', 'TR-707', 'LINN-DRUM', 'JUNGLE', 'MEMPHIS', 'GOA', 'ETHNIC-WORLD', 'GABBER', 'ACID', 'UK-GARAGE', 'EURO-DANCE', 'HARDSTYLE', 'DUBSTEP'];
 
-// Updated for 15 Tracks (Indices 0-14)
 const GENRE_KIT_MAP: Record<string, Record<number, string>> = {
     'TR-909': { 0: '909 BD', 1: '909 SD', 2: '909 CH', 3: '909 OH', 4: 'Rumble', 6: 'Sub Kick', 9: 'Cowbell', 12: '909 Crash' },
     'TR-707': { 0: '707 BD', 1: '707 SD', 2: '707 CH', 3: '707 OH', 4: 'House Bass', 9: '707 CB', 14: 'Rimshot', 13: 'Ride' },
@@ -94,6 +152,15 @@ const createPatterns = (variation: number, pitch: number, pan: number): PatternD
     }));
 };
 
+const createVariationStates = (vol: number, pan: number, pitch: number): VariationState[] => {
+    return Array.from({ length: 4 }, () => ({
+        volume: vol,
+        pan: pan,
+        pitch: pitch,
+        effects: getEffects()
+    }));
+};
+
 const createTrack = (
     id: number, name: string, type: InstrumentType, color: string, 
     vol: number, pan: number, pitch: number, variation: number
@@ -104,10 +171,10 @@ const createTrack = (
     volume: vol,
     pan, pitch, variation,
     muted: false,
-    effects: getEffects()
+    effects: getEffects(),
+    variationStates: createVariationStates(vol, pan, pitch)
 });
 
-// 15 Tracks for 3x5 Grid
 const DEFAULT_TRACKS: Track[] = [
   createTrack(0, 'Kick', InstrumentType.KICK, 'red', 0.9, 0, 0, 0),
   createTrack(1, 'Snare', InstrumentType.SNARE, 'orange', 0.8, 0, 0, 0),
@@ -116,52 +183,62 @@ const DEFAULT_TRACKS: Track[] = [
   createTrack(4, 'Bass', InstrumentType.BASS, 'lime', 0.8, 0, 0, 0),
   createTrack(5, 'Clap', InstrumentType.CLAP, 'green', 0.8, 0, 0, 0),
   createTrack(6, 'Lo Tom', InstrumentType.TOM_LOW, 'emerald', 0.8, -0.4, 0, 0),
-  createTrack(7, 'Hi Tom', InstrumentType.TOM_HI, 'teal', 0.8, 0.4, 0, 0),
-  createTrack(8, 'Synth', InstrumentType.SYNTH_HIT, 'cyan', 0.7, 0, 0, 0),
-  createTrack(9, 'Cowbell', InstrumentType.COWBELL, 'sky', 0.6, 0, 0, 0),
-  createTrack(10, 'Laser', InstrumentType.LASER, 'blue', 0.5, 0, 0, 0),
-  createTrack(11, 'FX', InstrumentType.FX, 'indigo', 0.6, 0, 0, 0),
-  createTrack(12, 'Crash', InstrumentType.CRASH, 'violet', 0.7, 0, 0, 0),
-  createTrack(13, 'Ride', InstrumentType.RIDE, 'purple', 0.6, 0.3, 0, 0),
-  createTrack(14, 'Rim', InstrumentType.RIMSHOT, 'fuchsia', 0.7, -0.1, 0, 0)
+  createTrack(7, 'Hi Tom', InstrumentType.TOM_HI, 'teal', 0.8, 0.4, 0, 0)
 ];
 
-// 3 Rows of 5 Columns
 const KEY_MAP: { [key: string]: number } = {
   'q': 0, 'w': 1, 'e': 2, 'r': 3, 't': 4,
   'a': 5, 's': 6, 'd': 7, 'f': 8, 'g': 9,
   'z': 10, 'x': 11, 'c': 12, 'v': 13, 'b': 14
 };
 
-const INITIAL_SCENES: number[][] = Array.from({ length: SCENE_COUNT }, (_, sceneIdx) => 
-    Array(16).fill(sceneIdx % PATTERN_COUNT)
-);
+// Helper: Create default scene state
+const createDefaultScene = (index: number, defaultTracks: Track[]): SceneData => {
+  const trackStates: Record<number, TrackStateSnapshot> = {};
+  defaultTracks.forEach(t => {
+      trackStates[t.id] = {
+          volume: t.volume,
+          pan: t.pan,
+          pitch: t.pitch,
+          muted: t.muted,
+          effects: JSON.parse(JSON.stringify(t.effects)),
+          soundConfig: t.soundConfig,
+          sample: t.sample,
+          activePatternIdx: index % PATTERN_COUNT, // Default pattern assignment
+          variation: t.variation,
+          color: t.color
+      };
+  });
+  return {
+      genre: 'TR-909',
+      bpm: 128,
+      trackStates
+  };
+};
 
 const cloneTracks = (tracks: Track[]): Track[] => {
     return tracks.map(track => ({
         ...track,
         patterns: JSON.parse(JSON.stringify(track.patterns)),
         effects: JSON.parse(JSON.stringify(track.effects)),
-        sample: track.sample ? { ...track.sample } : undefined
+        variationStates: JSON.parse(JSON.stringify(track.variationStates)),
+        sample: track.sample ? { ...track.sample } : undefined,
+        soundConfig: track.soundConfig ? { ...track.soundConfig } : undefined
     }));
 };
 
-// --- KNOB COMPONENT ---
 const TempoKnob = ({ bpm, onChange }: { bpm: number, onChange: (bpm: number) => void }) => {
   const tapTimes = useRef<number[]>([]);
   const lastTapTime = useRef<number>(0);
 
   const handleTap = () => {
       const now = Date.now();
-      
-      // Reset if too long since last tap (> 2s)
       if (now - lastTapTime.current > 2000) {
           tapTimes.current = [];
       }
       lastTapTime.current = now;
       tapTimes.current.push(now);
       
-      // Keep last 4 taps
       if (tapTimes.current.length > 4) {
           tapTimes.current.shift();
       }
@@ -192,7 +269,6 @@ const TempoKnob = ({ bpm, onChange }: { bpm: number, onChange: (bpm: number) => 
           const delta = (startY - ev.clientY); 
           if (Math.abs(delta) > 5) hasMoved = true;
           
-          // Sensitivity: 1px = 0.5 BPM
           const change = Math.round(delta * 0.5);
           const newBpm = Math.min(240, Math.max(60, startBpm + change));
           if (newBpm !== bpm) onChange(newBpm);
@@ -200,7 +276,6 @@ const TempoKnob = ({ bpm, onChange }: { bpm: number, onChange: (bpm: number) => 
       
       const onUp = (ev: PointerEvent) => {
           const duration = Date.now() - startTime;
-          // If short click and no drag, assume TAP
           if (!hasMoved && duration < 250) {
               handleTap();
           }
@@ -219,39 +294,88 @@ const TempoKnob = ({ bpm, onChange }: { bpm: number, onChange: (bpm: number) => 
 
   return (
       <div className="flex flex-col items-center gap-1" onPointerDown={handlePointerDown}>
-          <div className="w-16 h-16 rounded-full bg-[#e0e0e0] border-2 border-[#bbb] shadow-[0_4px_6px_rgba(0,0,0,0.2),inset_0_2px_4px_rgba(255,255,255,0.5)] relative cursor-ns-resize touch-none flex items-center justify-center group active:scale-95 transition-transform">
+          <div className="w-14 h-14 rounded-full bg-[#e0e0e0] border-2 border-[#bbb] shadow-[0_4px_6px_rgba(0,0,0,0.2),inset_0_2px_4px_rgba(255,255,255,0.5)] relative cursor-ns-resize touch-none flex items-center justify-center group active:scale-95 transition-transform">
                <div className="absolute inset-0 w-full h-full" style={{ transform: `rotate(${rotation}deg)` }}>
-                   <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-1.5 h-4 bg-orange-500 rounded-full shadow-sm"></div>
+                   <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-1.5 h-3.5 bg-orange-500 rounded-full shadow-sm"></div>
                </div>
-               <div className="w-8 h-8 rounded-full bg-[#ccc] shadow-inner border border-[#aaa] flex items-center justify-center">
-                    <span className="text-[7px] font-bold text-neutral-400 opacity-50">TAP</span>
+               <div className="w-7 h-7 rounded-full bg-[#ccc] shadow-inner border border-[#aaa] flex items-center justify-center">
+                    <span className="text-[6px] font-bold text-neutral-400 opacity-50">TAP</span>
                </div>
           </div>
-          <span className="text-xs font-black text-neutral-500 mt-1 tracking-widest">TEMPO</span>
+          <span className="text-[10px] font-black text-neutral-500 mt-0.5 tracking-widest">TEMPO</span>
       </div>
   );
 };
 
-const App: React.FC = () => {
-  // -- State --
+const MacroKnob = ({ label, value, onChange, color = 'bg-cyan-500' }: { label: string, value: number, onChange: (v: number) => void, color?: string }) => {
+    const handlePointerDown = (e: React.PointerEvent) => {
+        e.preventDefault(); e.stopPropagation();
+        const elm = e.currentTarget; elm.setPointerCapture(e.pointerId);
+        const startY = e.clientY; const startValue = value;
+        const onMove = (ev: PointerEvent) => {
+            const delta = (startY - ev.clientY) / 150;
+            onChange(Math.min(1, Math.max(0, startValue + delta)));
+        };
+        const onUp = (ev: PointerEvent) => {
+            elm.removeEventListener('pointermove', onMove as any);
+            elm.removeEventListener('pointerup', onUp as any);
+            elm.releasePointerCapture(ev.pointerId);
+        };
+        elm.addEventListener('pointermove', onMove as any);
+        elm.addEventListener('pointerup', onUp as any);
+    };
+
+    return (
+        <div className="flex flex-col items-center gap-1 w-full" onPointerDown={handlePointerDown}>
+             <div className="w-12 h-12 rounded-full bg-[#333] border-2 border-[#555] shadow-lg relative cursor-ns-resize touch-none group">
+                 <div className="absolute inset-0 w-full h-full" style={{ transform: `rotate(${-135 + (value * 270)}deg)` }}>
+                     <div className={`absolute top-1 left-1/2 -translate-x-1/2 w-1.5 h-3 rounded-full shadow-[0_0_8px_currentColor] ${color}`}></div>
+                 </div>
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-[#222] rounded-full border border-black/50 shadow-inner"></div>
+             </div>
+             <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-wider text-center leading-none">{label}</span>
+        </div>
+    );
+};
+
+export const App: React.FC = () => {
   const [tracks, setTracks] = useState<Track[]>(DEFAULT_TRACKS);
-  const [scenes, setScenes] = useState<number[][]>(INITIAL_SCENES);
+  
+  // New Scene State
+  const [scenes, setScenes] = useState<SceneData[]>(() => {
+    return Array.from({ length: SCENE_COUNT }, (_, i) => createDefaultScene(i, DEFAULT_TRACKS));
+  });
+
   const [bpm, setBpm] = useState(INITIAL_BPM);
   
   const [activeScene, setActiveScene] = useState(0);
   const [selectedGenre, setSelectedGenre] = useState<string>('TR-909');
+  
+  const [heldFxIndices, setHeldFxIndices] = useState<Set<number>>(new Set());
+  const [latchedFxIndices, setLatchedFxIndices] = useState<Set<number>>(new Set());
+  const [focusedFxIndex, setFocusedFxIndex] = useState<number>(0);
+  
+  // Param State now supports [Mix, A, B, Volume]
+  const [fxParamState, setFxParamState] = useState<Record<string, [number, number, number, number]>>({});
+  
+  const heldFxRef = useRef<Set<number>>(new Set());
+  const latchedFxRef = useRef<Set<number>>(new Set());
+  
+  const [fxSlots, setFxSlots] = useState<MasterEffectType[]>(DEFAULT_FX_SLOTS);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
+  
+  const selectedTrack = tracks.find(t => t.id === selectedTrackId) || tracks[0];
+
   const [statusMessage, setStatusMessage] = useState("READY");
   const [legendaryPatternIdx, setLegendaryPatternIdx] = useState<number | null>(null);
 
-  const [modValue, setModValue] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
-  const lockSnapshotRef = useRef<{ tracks: Track[], scenes: number[][], bpm: number } | null>(null);
+  const lockSnapshotRef = useRef<{ tracks: Track[], scenes: SceneData[], bpm: number } | null>(null);
 
   const [isSampling, setIsSampling] = useState(false);
   const [recordingAnalyser, setRecordingAnalyser] = useState<AnalyserNode | null>(null);
@@ -260,6 +384,15 @@ const App: React.FC = () => {
 
   const [previewBuffer, setPreviewBuffer] = useState<AudioBuffer | null>(null);
 
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [libraryTargetTrackId, setLibraryTargetTrackId] = useState<number | null>(null);
+  const [soundLibrary, setSoundLibrary] = useState(SOUND_LIBRARY);
+  
+  const [userSamples, setUserSamples] = useState<UserSample[]>([]);
+
+  // Automation Editing State
+  const [lastTouchedParam, setLastTouchedParam] = useState<{ trackId: number, param: string, label: string } | null>(null);
+
   const audioSynth = useRef<AudioSynth | null>(null);
   const nextNoteTime = useRef(0);
   const timerID = useRef<number | null>(null);
@@ -267,88 +400,156 @@ const App: React.FC = () => {
   const playbackStepRef = useRef(0);
   const isPlayingRef = useRef(false);
   const tracksRef = useRef(tracks); 
-  const padRefs = useRef<{ [id: number]: PadHandle | null }>({});
-  const mixerRef = useRef<MixerHandle>(null);
+  const padMixRefs = useRef<{ [id: number]: PadMixHandle | null }>({});
   const isRecordingRef = useRef(false);
   const metronomeEnabledRef = useRef(false);
   const randomIntervalRef = useRef<number | null>(null);
   const activeSceneRef = useRef(activeScene);
   const scenesRef = useRef(scenes);
+  const previewDebounceRef = useRef<number | null>(null);
+  const selectedTrackIdRef = useRef(selectedTrackId);
   
-  const historyRef = useRef<{ tracks: Track[], scenes: number[][], bpm: number }[]>([]);
+  const historyRef = useRef<{ tracks: Track[], scenes: SceneData[], bpm: number }[]>([]);
   
+  const genreStatesRef = useRef<Record<string, Record<number, { pitch: number, volume: number, pan: number, effects: ChannelEffects }>>>({});
+
   const bpmRef = useRef(bpm);
 
-  useEffect(() => {
-    tracksRef.current = tracks;
-  }, [tracks]);
+  useEffect(() => { tracksRef.current = tracks; }, [tracks]);
+  useEffect(() => { scenesRef.current = scenes; }, [scenes]);
+  useEffect(() => { activeSceneRef.current = activeScene; }, [activeScene]);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { metronomeEnabledRef.current = metronomeEnabled; }, [metronomeEnabled]);
+  useEffect(() => { bpmRef.current = bpm; if(audioSynth.current) audioSynth.current.updateBpm(bpm); }, [bpm]);
+  useEffect(() => { selectedTrackIdRef.current = selectedTrackId; }, [selectedTrackId]);
 
   useEffect(() => {
-      scenesRef.current = scenes;
-  }, [scenes]);
-  
-  useEffect(() => {
-    activeSceneRef.current = activeScene;
-  }, [activeScene]);
-
-  useEffect(() => {
-    isRecordingRef.current = isRecording;
-  }, [isRecording]);
-
-  useEffect(() => {
-    metronomeEnabledRef.current = metronomeEnabled;
-  }, [metronomeEnabled]);
-
-  useEffect(() => {
-      bpmRef.current = bpm; 
-      if(audioSynth.current) {
-          audioSynth.current.updateBpm(bpm);
-      }
-  }, [bpm]);
-
-  useEffect(() => {
-      const unlock = () => {
-          if (audioSynth.current) {
-              audioSynth.current.resume().catch(() => {});
+      const handleGlobalInput = (e: KeyboardEvent | MouseEvent) => {
+          if (typeof e.getModifierState === 'function') {
+             const capsState = e.getModifierState('CapsLock');
+             setIsRecording(prev => {
+                 if (prev !== capsState) {
+                    // Start/Stop recording via CapsLock implies history change if starting
+                    if (capsState) addToHistory();
+                    return capsState;
+                 }
+                 return prev;
+             });
           }
       };
-      window.addEventListener('mousedown', unlock, { once: true });
-      window.addEventListener('keydown', unlock, { once: true });
-      window.addEventListener('touchstart', unlock, { once: true });
+      window.addEventListener('keydown', handleGlobalInput);
+      window.addEventListener('keyup', handleGlobalInput);
+      window.addEventListener('mousedown', handleGlobalInput);
+      window.addEventListener('mouseup', handleGlobalInput);
       return () => {
-          window.removeEventListener('mousedown', unlock);
-          window.removeEventListener('keydown', unlock);
-          window.removeEventListener('touchstart', unlock);
+          window.removeEventListener('keydown', handleGlobalInput);
+          window.removeEventListener('keyup', handleGlobalInput);
+          window.removeEventListener('mousedown', handleGlobalInput);
+          window.removeEventListener('mouseup', handleGlobalInput);
       };
   }, []);
 
   const initAudio = () => {
     if (!audioSynth.current) {
       audioSynth.current = new AudioSynth();
-      tracks.forEach(t => audioSynth.current?.updateTrackParameters(t));
+      tracks.forEach(t => {
+          audioSynth.current?.ensureChannel(t.id);
+          audioSynth.current?.updateTrackParameters(t);
+      });
+      // Initialize FX Params
+      const params: Record<string, [number, number, number, number]> = {};
+      Object.values(MasterEffectType).forEach(type => {
+         params[type] = audioSynth.current!.getMasterFxParams(type); 
+      });
+      setFxParamState(params);
     }
   };
 
   useEffect(() => {
-      const track = tracks.find(t => t.id === selectedTrackId);
-      if (track && audioSynth.current) {
-          const gen = async () => {
-              const buf = await audioSynth.current!.renderPreview(track);
-              setPreviewBuffer(buf);
-          };
-          gen();
+      const unlock = () => {
+          if (!audioSynth.current) initAudio();
+          if (audioSynth.current) {
+              audioSynth.current.resume().catch(() => {});
+              audioSynth.current.playSilent();
+          }
+      };
+      window.addEventListener('click', unlock, { once: true });
+      window.addEventListener('touchstart', unlock, { once: true });
+      window.addEventListener('keydown', unlock, { once: true });
+      return () => {
+          window.removeEventListener('click', unlock);
+          window.removeEventListener('touchstart', unlock);
+          window.removeEventListener('keydown', unlock);
+      };
+  }, []); 
+
+  // OPTIMIZED: Track selection only updates if ID changed to prevent re-renders on repeated hits
+  const handleSelectTrack = useCallback((id: number) => {
+      if (selectedTrackIdRef.current !== id) {
+          setSelectedTrackId(id);
       }
+  }, []);
+
+  const handleAddTrack = (targetId?: number) => {
+      const newId = targetId !== undefined 
+          ? targetId 
+          : (tracks.length > 0 ? Math.max(...tracks.map(t => t.id)) + 1 : 0);
+      
+      if (tracks.some(t => t.id === newId)) return;
+
+      const newTrack = createTrack(newId, 'EMPTY', InstrumentType.SYNTH_HIT, 'orange', 0.8, 0, 0, 0);
+      addToHistory();
+      setTracks(prev => [...prev, newTrack].sort((a, b) => a.id - b.id));
+      if (audioSynth.current) {
+          audioSynth.current.ensureChannel(newId);
+          audioSynth.current.updateTrackParameters(newTrack);
+      }
+      handleSelectTrack(newId);
+      setStatusMessage(`PADMIX ${newId + 1} ADDED`);
+  };
+
+  const handleDeleteTrack = (id: number) => {
+      if (tracks.length <= 1) {
+          setStatusMessage("CANNOT DELETE LAST TRACK");
+          return;
+      }
+      addToHistory();
+      if (audioSynth.current) audioSynth.current.removeChannel(id);
+      const newTracks = tracks.filter(t => t.id !== id);
+      setTracks(newTracks);
+      if (selectedTrackId === id) handleSelectTrack(newTracks[0].id);
+      setStatusMessage(`TRACK ${id + 1} DELETED`);
+  };
+  
+  const handleColorChange = (id: number, color: string) => {
+      setTracks(prev => prev.map(t => t.id === id ? { ...t, color } : t));
+  };
+
+  useEffect(() => {
+      if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current);
+      previewDebounceRef.current = window.setTimeout(() => {
+          const track = tracks.find(t => t.id === selectedTrackId);
+          if (track && audioSynth.current) {
+              const gen = async () => {
+                  try {
+                      const buf = await audioSynth.current!.renderPreview(track);
+                      setPreviewBuffer(buf);
+                  } catch(e) { /* ignore */ }
+              };
+              gen();
+          }
+      }, 300);
+      return () => { if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current); }
   }, [selectedTrackId, tracks, selectedGenre]); 
 
   const addToHistory = useCallback(() => {
+      // NOTE: This is expensive. Do NOT call during rapid recording.
       historyRef.current.push({
           tracks: cloneTracks(tracksRef.current),
           scenes: JSON.parse(JSON.stringify(scenesRef.current)),
           bpm: bpmRef.current
       });
-      if (historyRef.current.length > 50) {
-          historyRef.current.shift();
-      }
+      if (historyRef.current.length > 50) historyRef.current.shift();
   }, []);
 
   const handleUndo = useCallback(() => {
@@ -357,7 +558,6 @@ const App: React.FC = () => {
           setTracks(cloneTracks(prev.tracks));
           setScenes(JSON.parse(JSON.stringify(prev.scenes)));
           setBpm(prev.bpm);
-          
           if (audioSynth.current) {
              audioSynth.current.updateBpm(prev.bpm);
              prev.tracks.forEach(t => audioSynth.current?.updateTrackParameters(t));
@@ -375,7 +575,6 @@ const App: React.FC = () => {
               setTracks(cloneTracks(snapshot.tracks));
               setScenes(JSON.parse(JSON.stringify(snapshot.scenes)));
               setBpm(snapshot.bpm);
-              
               if (audioSynth.current) {
                   snapshot.tracks.forEach(t => audioSynth.current?.updateTrackParameters(t));
                   audioSynth.current.updateBpm(snapshot.bpm);
@@ -407,6 +606,11 @@ const App: React.FC = () => {
     await audioSynth.current?.resume();
     setIsPlaying(prev => !prev);
   };
+  
+  const toggleRecording = () => {
+      if (!isRecording) addToHistory(); // Snapshot before recording starts
+      setIsRecording(prev => !prev);
+  };
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -422,8 +626,7 @@ const App: React.FC = () => {
   }, [isPlaying]);
 
   const visualTrigger = (id: number, variation: number) => {
-    padRefs.current[id]?.trigger(variation);
-    mixerRef.current?.trigger(id);
+    padMixRefs.current[id]?.trigger(variation);
   };
 
   const recordAutomation = useCallback((id: number, key: string, value: number) => {
@@ -434,16 +637,11 @@ const App: React.FC = () => {
                   const activePIdx = t.activePatternIdx;
                   const newPatterns = [...t.patterns];
                   const currentPattern = newPatterns[activePIdx];
-                  
                   const newAutomation = { ...currentPattern.automation };
-                  if (!newAutomation[key]) {
-                      newAutomation[key] = Array(16).fill(null);
-                  }
-                  
+                  if (!newAutomation[key]) newAutomation[key] = Array(16).fill(null);
                   const newStepValues = [...newAutomation[key]];
                   newStepValues[step] = value;
                   newAutomation[key] = newStepValues;
-                  
                   newPatterns[activePIdx] = { ...currentPattern, automation: newAutomation };
                   return { ...t, patterns: newPatterns };
               }
@@ -452,12 +650,49 @@ const App: React.FC = () => {
       }
   }, []);
 
+  // Update Automation directly from the Editor Grid
+  const handleAutomationGridUpdate = useCallback((step: number, value: number | null) => {
+      if (!lastTouchedParam) return;
+      
+      const { trackId, param } = lastTouchedParam;
+      setTracks(prev => prev.map(t => {
+          if (t.id === trackId) {
+             const activePIdx = t.activePatternIdx;
+             const newPatterns = [...t.patterns];
+             const currentPattern = newPatterns[activePIdx];
+             const newAutomation = { ...currentPattern.automation };
+             if (!newAutomation[param]) newAutomation[param] = Array(16).fill(null);
+             const newStepValues = [...newAutomation[param]];
+             newStepValues[step] = value;
+             newAutomation[param] = newStepValues;
+             newPatterns[activePIdx] = { ...currentPattern, automation: newAutomation };
+             return { ...t, patterns: newPatterns }; 
+          }
+          return t;
+      }));
+  }, [lastTouchedParam]);
+
+  const handleClearAutomation = useCallback(() => {
+      if (!lastTouchedParam) return;
+      const { trackId, param } = lastTouchedParam;
+      setTracks(prev => prev.map(t => {
+          if (t.id === trackId) {
+             const activePIdx = t.activePatternIdx;
+             const newPatterns = [...t.patterns];
+             const currentPattern = newPatterns[activePIdx];
+             const newAutomation = { ...currentPattern.automation };
+             newAutomation[param] = Array(16).fill(null);
+             newPatterns[activePIdx] = { ...currentPattern, automation: newAutomation };
+             return { ...t, patterns: newPatterns }; 
+          }
+          return t;
+      }));
+  }, [lastTouchedParam]);
+
   const scheduleNote = (stepNumber: number, time: number) => {
     const drawStep = stepNumber;
     const ctx = audioSynth.current?.getContext();
-    
     if (!ctx) return;
-
     const delayMs = Math.max(0, (time - ctx.currentTime) * 1000);
 
     if (metronomeEnabledRef.current && stepNumber % 4 === 0) {
@@ -472,16 +707,8 @@ const App: React.FC = () => {
         if (pattern.automation) {
             const autoKeys = Object.keys(pattern.automation);
             const hasChanges = autoKeys.some(k => pattern.automation[k][stepNumber] !== null);
-            
             if (hasChanges) {
-                 automatedTrack = {
-                     ...track,
-                     effects: { ...track.effects },
-                     pitch: track.pitch,
-                     volume: track.volume,
-                     pan: track.pan
-                 };
-
+                 automatedTrack = { ...track, effects: { ...track.effects }, pitch: track.pitch, volume: track.volume, pan: track.pan };
                  autoKeys.forEach(key => {
                      const val = pattern.automation[key][stepNumber];
                      if (val !== null) {
@@ -501,11 +728,9 @@ const App: React.FC = () => {
                          }
                      }
                  });
-                 
                  audioSynth.current?.updateTrackParameters(automatedTrack, time);
             }
         }
-
         if (isActive && !track.muted) {
             audioSynth.current?.trigger(automatedTrack, time);
         }
@@ -523,15 +748,11 @@ const App: React.FC = () => {
   const scheduler = () => {
     if (!audioSynth.current) return;
     const scheduleAheadTime = 0.1;
-
     while (nextNoteTime.current < audioSynth.current.getContext().currentTime + scheduleAheadTime) {
       scheduleNote(currentStepRef.current, nextNoteTime.current);
       nextNote();
     }
-    
-    if (isPlayingRef.current) {
-      timerID.current = requestAnimationFrame(scheduler);
-    }
+    if (isPlayingRef.current) timerID.current = requestAnimationFrame(scheduler);
   };
 
   const nextNote = () => {
@@ -541,37 +762,61 @@ const App: React.FC = () => {
     currentStepRef.current = (currentStepRef.current + 1) % STEPS;
   };
 
+  // OPTIMIZED: Track recording logic to fix latency and quantization accuracy
   const recordNote = useCallback((id: number) => {
-    if (isPlayingRef.current && isRecordingRef.current) {
-        addToHistory(); 
-        const currentS = playbackStepRef.current; 
+    if (!isPlayingRef.current || !isRecordingRef.current || !audioSynth.current) return;
+
+    const ctx = audioSynth.current.getContext();
+    const now = ctx.currentTime;
+    
+    // Calculate precise quantization based on audio time, NOT visual step
+    const nextTime = nextNoteTime.current;
+    const nextStepIndex = currentStepRef.current;
+    
+    // Calculate step duration
+    const secondsPerBeat = 60.0 / bpmRef.current;
+    const stepDuration = secondsPerBeat / 4;
+    
+    // diff is how far we are from the START of the NEXT scheduled step.
+    const diff = nextTime - now;
+    
+    // Determine closest grid point
+    const stepsAway = Math.round(diff / stepDuration);
+    
+    // If stepsAway is 0, we are closest to nextStepIndex.
+    // If stepsAway is 1, we are closest to nextStepIndex - 1.
+    const targetStep = (nextStepIndex - stepsAway + STEPS) % STEPS;
+
+    // Defer heavy state update to next frame to allow audio triggers to remain instant
+    requestAnimationFrame(() => {
         setTracks(prev => prev.map(t => {
             if (t.id === id) {
                 const activePIdx = t.activePatternIdx;
                 const newPatterns = [...t.patterns];
                 const newPatternData = { ...newPatterns[activePIdx] };
                 const newSteps = [...newPatternData.steps];
-                newSteps[currentS] = true;
+                newSteps[targetStep] = true;
                 newPatternData.steps = newSteps;
                 newPatterns[activePIdx] = newPatternData;
                 return { ...t, patterns: newPatterns };
             }
             return t;
         }));
-    }
-  }, [addToHistory]);
+    });
+  }, []);
 
   const handlePadTrigger = useCallback((id: number) => {
+    // AUDIO & VISUAL FIRST - Priority 1
     const track = tracksRef.current.find(t => t.id === id);
-    if (track) {
-        visualTrigger(id, track.variation);
-    }
-
+    if (track) visualTrigger(id, track.variation);
+    
     initAudio();
     audioSynth.current?.resume().catch(() => {}); 
-
+    
     if (track && !track.muted) {
       audioSynth.current?.trigger(track);
+      
+      // STATE UPDATE LAST - Priority 2
       recordNote(id);
     }
   }, [recordNote]);
@@ -594,32 +839,67 @@ const App: React.FC = () => {
   }, [selectedTrackId, addToHistory]);
 
   const handleVariationSelect = useCallback((id: number, variation: number) => {
+    // AUDIO FIRST
     initAudio();
     audioSynth.current?.resume().catch(() => {});
     visualTrigger(id, variation);
     
     const currentTrack = tracksRef.current.find(t => t.id === id);
-    if (currentTrack && !currentTrack.muted) {
-        const tempTrack = { ...currentTrack, variation: variation };
+    let targetState = currentTrack?.variationStates[variation];
+    if (!targetState && currentTrack) {
+         targetState = {
+            volume: currentTrack.volume,
+            pan: currentTrack.pan,
+            pitch: currentTrack.pitch,
+            effects: currentTrack.effects
+        };
+    }
+
+    if (currentTrack && !currentTrack.muted && targetState) {
+        const tempTrack = { 
+            ...currentTrack, 
+            variation: variation, 
+            volume: targetState.volume,
+            pan: targetState.pan,
+            pitch: targetState.pitch,
+            effects: targetState.effects
+        };
         audioSynth.current?.trigger(tempTrack);
     }
 
+    // STATE UPDATE LATER
+    // We can debounce history if needed, but variation select is less frequent than drumming
     addToHistory(); 
+    
     setTracks(prev => {
         const next = prev.map(t => {
             if (t.id === id) {
                 const activePIdx = t.activePatternIdx;
                 const newPatterns = [...t.patterns];
                 newPatterns[activePIdx] = { ...newPatterns[activePIdx], variation: variation };
-                return { ...t, variation: variation, patterns: newPatterns };
+                const targetState = t.variationStates[variation] || {
+                    volume: t.volume, pan: t.pan, pitch: t.pitch, effects: t.effects
+                };
+                const updated = { 
+                    ...t, 
+                    variation: variation, 
+                    patterns: newPatterns,
+                    volume: targetState.volume,
+                    pan: targetState.pan,
+                    pitch: targetState.pitch,
+                    effects: targetState.effects
+                };
+                audioSynth.current?.updateTrackParameters(updated);
+                return updated;
             }
             return t;
         });
         return next;
     });
-    setSelectedTrackId(id);
+    
+    handleSelectTrack(id);
     recordNote(id); 
-  }, [recordNote, addToHistory]);
+  }, [recordNote, addToHistory, handleSelectTrack]);
 
   const handleMuteToggle = useCallback((id: number) => {
      addToHistory();
@@ -627,23 +907,13 @@ const App: React.FC = () => {
          if (t.id === id) {
              const newMuted = !t.muted;
              setStatusMessage(newMuted ? `${t.name} MUTED` : `${t.name} ACTIVE`);
-             return { ...t, muted: newMuted };
+             const updated = { ...t, muted: newMuted };
+             audioSynth.current?.updateTrackParameters(updated);
+             return updated;
          }
          return t;
      }));
   }, [addToHistory]);
-
-  const handleClearAll = () => {
-    addToHistory();
-    setTracks(prev => prev.map(t => {
-        const newPatterns = [...t.patterns];
-        const active = t.activePatternIdx;
-        newPatterns[active] = { ...newPatterns[active], steps: Array(16).fill(false), automation: {} };
-        return { ...t, patterns: newPatterns };
-    }));
-    setStatusMessage("PATTERN CLEARED");
-    setLegendaryPatternIdx(null);
-  };
 
   const handleClearTrack = () => {
     addToHistory();
@@ -658,6 +928,31 @@ const App: React.FC = () => {
     }));
     setStatusMessage("TRACK CLEARED");
   };
+  
+  const handleClearPattern = () => handleClearTrack();
+
+  const handleClearSample = useCallback((val: number) => {
+      addToHistory();
+      setTracks(prev => prev.map(t => {
+          if (t.id === selectedTrackId) {
+             if (t.sample?.isCustom) {
+                 setStatusMessage("SAMPLE CLEARED");
+                 return { ...t, sample: undefined };
+             }
+             if (t.name !== 'EMPTY') {
+                 setStatusMessage("TRACK EMPTY");
+                 return {
+                     ...t,
+                     name: 'EMPTY',
+                     sample: undefined,
+                     soundConfig: { genre: 'NONE', type: t.type, name: 'EMPTY' }
+                 };
+             }
+             return t;
+          }
+          return t;
+      }));
+  }, [selectedTrackId, addToHistory, selectedTrack]);
 
   const handleQuickFill = useCallback((type: string) => {
       addToHistory();
@@ -667,7 +962,6 @@ const App: React.FC = () => {
               const newPatterns = [...t.patterns];
               let newSteps = [...newPatterns[activePIdx].steps]; 
               const reset = () => newSteps.fill(false);
-              
               switch(type) {
                   case 'CLR': reset(); break;
                   case '1/1': reset(); newSteps[0] = true; break;
@@ -698,7 +992,6 @@ const App: React.FC = () => {
                   case 'SH<': { const f = newSteps.shift(); if(f!==undefined) newSteps.push(f); break; }
                   case 'SH>': { const l = newSteps.pop(); if(l!==undefined) newSteps.unshift(l); break; }
               }
-
               newPatterns[activePIdx] = { ...newPatterns[activePIdx], steps: newSteps };
               return { ...t, patterns: newPatterns };
           }
@@ -707,30 +1000,59 @@ const App: React.FC = () => {
       setStatusMessage(`FILL: ${type}`);
   }, [selectedTrackId, addToHistory]);
 
+  const updateVariationState = (track: Track, newVol: number, newPan: number, newPitch: number, newEffects: ChannelEffects) => {
+      const newVarStates = [...track.variationStates];
+      newVarStates[track.variation] = { volume: newVol, pan: newPan, pitch: newPitch, effects: newEffects };
+      return newVarStates;
+  };
+
   const handleVolumeChange = useCallback((id: number, val: number) => {
     recordAutomation(id, 'volume', val);
-
+    setLastTouchedParam({ trackId: id, param: 'volume', label: 'VOLUME' });
     setTracks(prev => prev.map(t => {
-        if (t.id === id) return { ...t, volume: val };
+        if (t.id === id) {
+            const newVarStates = updateVariationState(t, val, t.pan, t.pitch, t.effects);
+            const updated = { ...t, volume: val, variationStates: newVarStates };
+            audioSynth.current?.updateTrackParameters(updated);
+            return updated;
+        }
         return t;
     }));
   }, [recordAutomation]);
 
+  const handleTrackPitchChange = useCallback((id: number, val: number) => {
+     if (isPlayingRef.current && isRecordingRef.current) recordAutomation(id, 'pitch', val);
+     setLastTouchedParam({ trackId: id, param: 'pitch', label: 'PITCH' });
+     setTracks(prev => prev.map(t => {
+          if (t.id === id) {
+             const activePIdx = t.activePatternIdx;
+             const newPatterns = [...t.patterns];
+             newPatterns[activePIdx] = { ...newPatterns[activePIdx], pitch: val };
+             const newVarStates = updateVariationState(t, t.volume, t.pan, val, t.effects);
+             const updated = { ...t, pitch: val, patterns: newPatterns, variationStates: newVarStates };
+             audioSynth.current?.updateTrackParameters(updated);
+             return updated;
+          }
+          return t;
+     }));
+     const sign = val > 0 ? '+' : '';
+     setStatusMessage(`PITCH: ${sign}${val.toFixed(2)}`);
+  }, [recordAutomation]);
+
   const handleEffectChange = useCallback((id: number, effectType: keyof ChannelEffects, param: 'active' | 'value', val: number | boolean) => {
-     recordAutomation(id, `effects.${effectType}.${param}`, typeof val === 'boolean' ? (val ? 1 : 0) : val);
+     const paramKey = `effects.${effectType}.${param}`;
+     recordAutomation(id, paramKey, typeof val === 'boolean' ? (val ? 1 : 0) : val);
+     if (param === 'value') {
+         setLastTouchedParam({ trackId: id, param: paramKey, label: `${effectType.toUpperCase()} ${param.toUpperCase()}` });
+     }
      
      setTracks(prev => prev.map(t => {
          if (t.id === id) {
-             return {
-                 ...t,
-                 effects: {
-                     ...t.effects,
-                     [effectType]: {
-                         ...t.effects[effectType],
-                         [param]: val
-                     }
-                 }
-             };
+             const newEffects = { ...t.effects, [effectType]: { ...t.effects[effectType], [param]: val } };
+             const newVarStates = updateVariationState(t, t.volume, t.pan, t.pitch, newEffects);
+             const updated = { ...t, effects: newEffects, variationStates: newVarStates };
+             audioSynth.current?.updateTrackParameters(updated);
+             return updated;
          }
          return t;
      }));
@@ -740,7 +1062,6 @@ const App: React.FC = () => {
         initAudio();
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
             if (audioSynth.current) {
                 const ctx = audioSynth.current.getContext();
                 const source = ctx.createMediaStreamSource(stream);
@@ -749,34 +1070,20 @@ const App: React.FC = () => {
                 source.connect(analyser);
                 setRecordingAnalyser(analyser);
             }
-
             const mr = new MediaRecorder(stream);
             mediaRecorderRef.current = mr;
             chunksRef.current = [];
-
-            mr.ondataavailable = (e) => {
-                chunksRef.current.push(e.data);
-            };
-
+            mr.ondataavailable = (e) => chunksRef.current.push(e.data);
             mr.onstop = async () => {
                 const blob = new Blob(chunksRef.current, { type: 'audio/ogg; codecs=opus' });
                 const arrayBuffer = await blob.arrayBuffer();
                 if (audioSynth.current) {
                     const ctx = audioSynth.current.getContext();
                     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-                    
                     addToHistory();
                     setTracks(prev => prev.map(t => {
                         if (t.id === selectedTrackId) {
-                            return {
-                                ...t,
-                                sample: {
-                                    buffer: audioBuffer,
-                                    start: 0,
-                                    end: 1,
-                                    isCustom: true
-                                }
-                            };
+                            return { ...t, sample: { buffer: audioBuffer, start: 0, end: 1, isCustom: true, stretch: false } };
                         }
                         return t;
                     }));
@@ -785,7 +1092,6 @@ const App: React.FC = () => {
                 stream.getTracks().forEach(t => t.stop());
                 setRecordingAnalyser(null); 
             };
-
             mr.start();
             setIsSampling(true);
         } catch (err) {
@@ -803,8 +1109,21 @@ const App: React.FC = () => {
 
   const handleSampleRegionUpdate = useCallback((newStart: number, newEnd: number) => {
        setTracks(prev => prev.map(t => {
-          if (t.id === selectedTrackId && t.sample) {
-              return { ...t, sample: { ...t.sample, start: newStart, end: newEnd } };
+          if (t.id === selectedTrackId) {
+              const currentSample = t.sample || { buffer: null, isCustom: false, start: 0, end: 1, stretch: false };
+              return { ...t, sample: { ...currentSample, start: newStart, end: newEnd } };
+          }
+          return t;
+      }));
+  }, [selectedTrackId]);
+
+  const handleToggleStretch = useCallback(() => {
+      setTracks(prev => prev.map(t => {
+          if (t.id === selectedTrackId) {
+              const currentSample = t.sample || { buffer: null, isCustom: false, start: 0, end: 1, stretch: false };
+              const newStretch = !currentSample.stretch;
+              setStatusMessage(newStretch ? "STRETCH: ON (LOCK LENGTH)" : "STRETCH: OFF");
+              return { ...t, sample: { ...currentSample, stretch: newStretch } };
           }
           return t;
       }));
@@ -812,69 +1131,38 @@ const App: React.FC = () => {
 
   const handlePitchWheel = useCallback((val: number) => {
      const effectivePitch = val * 3; 
-     if (isPlayingRef.current && isRecordingRef.current) {
-         recordAutomation(selectedTrackId, 'pitch', effectivePitch);
-     }
+     if (isPlayingRef.current && isRecordingRef.current) recordAutomation(selectedTrackId, 'pitch', effectivePitch);
      setTracks(prev => prev.map(t => {
           if (t.id === selectedTrackId) {
              const activePIdx = t.activePatternIdx;
              const newPatterns = [...t.patterns];
              newPatterns[activePIdx] = { ...newPatterns[activePIdx], pitch: effectivePitch };
-             return { ...t, pitch: effectivePitch, patterns: newPatterns };
+             const newVarStates = updateVariationState(t, t.volume, t.pan, effectivePitch, t.effects);
+             const updated = { ...t, pitch: effectivePitch, patterns: newPatterns, variationStates: newVarStates };
+             audioSynth.current?.updateTrackParameters(updated);
+             return updated;
           }
           return t;
      }));
      setStatusMessage(`PITCH: ${effectivePitch.toFixed(2)}`);
   }, [selectedTrackId, recordAutomation]);
 
-  const handleModWheel = useCallback((val: number) => {
-      setModValue(val);
-      setTracks(prev => prev.map(t => {
-          if (t.id === selectedTrackId) {
-               const newVol = 0.5 + (val * 1.0); 
-               if (isPlayingRef.current && isRecordingRef.current) {
-                  recordAutomation(selectedTrackId, 'volume', newVol);
-               }
-               return { ...t, volume: newVol };
-          }
-          return t;
-      }));
-      setStatusMessage(`MOD VOL: ${(val * 100).toFixed(0)}%`);
-  }, [selectedTrackId, recordAutomation]);
-
-  const handleSampleClear = () => {
-      addToHistory();
-      setTracks(prev => prev.map(t => {
-          if (t.id === selectedTrackId) {
-              return { ...t, sample: undefined };
-          }
-          return t;
-      }));
-      setStatusMessage("SAMPLE CLEARED");
-  };
-
   const loadLegendaryPattern = useCallback((index: number) => {
       if (index < 0 || index >= LEGENDARY_PATTERNS.length) return;
       addToHistory();
       const pattern = LEGENDARY_PATTERNS[index];
-      
       const parseSteps = (str: string) => {
           const s = Array(16).fill(false);
           const clean = str.replace(/[\s|]/g, '');
           for (let i=0; i<16; i++) if(clean[i] && clean[i].toLowerCase() === 'x') s[i] = true;
           return s;
       };
-
       setTracks(prev => prev.map(t => {
           const patternStr = pattern.tracks[t.id];
           if (patternStr) {
               const newPatterns = [...t.patterns];
               const activePIdx = t.activePatternIdx;
-              newPatterns[activePIdx] = {
-                  ...newPatterns[activePIdx],
-                  steps: parseSteps(patternStr),
-                  automation: {} 
-              };
+              newPatterns[activePIdx] = { ...newPatterns[activePIdx], steps: parseSteps(patternStr), automation: {} };
               return { ...t, patterns: newPatterns };
           } else {
               const newPatterns = [...t.patterns];
@@ -883,7 +1171,6 @@ const App: React.FC = () => {
               return { ...t, patterns: newPatterns };
           }
       }));
-      
       setLegendaryPatternIdx(index);
       setStatusMessage(`LEGEND: ${pattern.name}`); 
   }, [addToHistory]);
@@ -902,21 +1189,25 @@ const App: React.FC = () => {
 
   const loadGenre = (genre: string) => {
       addToHistory();
+      const currentGenreState: Record<number, any> = {};
+      tracksRef.current.forEach(t => {
+          currentGenreState[t.id] = { pitch: t.pitch, volume: t.volume, pan: t.pan, effects: t.effects };
+      });
+      genreStatesRef.current[selectedGenre] = currentGenreState;
+
       setSelectedGenre(genre);
       setStatusMessage(`PACK LOADED: ${genre}`);
       initAudio();
       setLegendaryPatternIdx(null); 
-      
-      if (audioSynth.current) {
-          audioSynth.current.setGenre(genre);
-      }
+      if (audioSynth.current) audioSynth.current.setGenre(genre);
 
-      const newGenrePatterns = getGenrePatterns(genre);
+      const savedState = genreStatesRef.current[genre];
 
-      setTracks(prev => prev.map(t => {
+      const newTracks = tracksRef.current.map(t => {
           let newEffects = getEffects();
-          let newPitch = 0;
-          let newVol = t.volume;
+          let newPitch = 0; 
+          let newVol = t.volume; 
+          let newPan = 0;
           let newName = t.name;
 
           if (GENRE_KIT_MAP[genre] && GENRE_KIT_MAP[genre][t.id]) {
@@ -926,114 +1217,163 @@ const App: React.FC = () => {
               if (def) newName = def.name;
           }
           
-          switch(genre) {
-              case 'TR-909':
-                  if (t.type === InstrumentType.KICK) { newVol = 1.0; }
-                  if (t.type === InstrumentType.HIHAT_OPEN) { newEffects.reverb.active = true; newEffects.reverb.value = 0.2; }
-                  break;
-              case 'MEMPHIS':
-                  if (t.type === InstrumentType.KICK) { newEffects.bitcrush.active = true; newEffects.bitcrush.value = 0.2; }
-                  if (t.type === InstrumentType.COWBELL) { newEffects.reverb.active = true; newEffects.reverb.value = 0.4; }
-                  break;
-              case 'ETHNIC-WORLD':
-                   if (t.type === InstrumentType.CHORD) { newEffects.reverb.active = true; newEffects.reverb.value = 0.6; } 
-                   break;
-              case 'GABBER':
-                   if (t.type === InstrumentType.KICK) { newVol = 1.0; newEffects.bitcrush.active = true; newEffects.bitcrush.value = 0.6; }
-                   break;
-              case 'UK-GARAGE':
-                   if (t.type === InstrumentType.SNARE) { newPitch = 0.2; }
-                   if (t.type === InstrumentType.HIHAT_CLOSED) { newVol = 0.6; }
-                   break;
-              case 'ACID':
-                   if (t.type === InstrumentType.BASS) { newEffects.delay.active = true; newEffects.delay.value = 0.4; }
-                   break;
-              case 'HARDSTYLE':
-                   if (t.type === InstrumentType.KICK) { newVol = 1.0; }
-                   break;
-              case 'DUBSTEP':
-                   if (t.type === InstrumentType.BASS) { newEffects.filter.active = true; newEffects.filter.value = 0.3; } 
-                   break;
-          }
-          
-          const trackPatterns = [...t.patterns];
-          const newPatternData = newGenrePatterns[t.id] || [];
-          
-          for (let i=0; i<PATTERN_COUNT; i++) {
-              if (newPatternData[i]) {
-                  trackPatterns[i] = {
-                      ...trackPatterns[i],
-                      steps: newPatternData[i].steps || trackPatterns[i].steps,
-                      variation: newPatternData[i].variation ?? trackPatterns[i].variation,
-                      pitch: newPatternData[i].pitch ?? trackPatterns[i].pitch,
-                      pan: newPatternData[i].pan ?? trackPatterns[i].pan,
-                      automation: {}
-                  };
-              } else if (i >= newPatternData.length) {
-                  trackPatterns[i] = { ...trackPatterns[i], steps: Array(16).fill(false), automation: {} };
+          if (savedState && savedState[t.id]) {
+              newPitch = savedState[t.id].pitch;
+              newVol = savedState[t.id].volume;
+              newPan = savedState[t.id].pan;
+              newEffects = savedState[t.id].effects;
+          } else {
+              switch(genre) {
+                  case 'TR-909': if (t.type === InstrumentType.KICK) newVol = 1.0; if (t.type === InstrumentType.HIHAT_OPEN) { newEffects.reverb.active = true; newEffects.reverb.value = 0.2; } break;
+                  case 'MEMPHIS': if (t.type === InstrumentType.KICK) { newEffects.bitcrush.active = true; newEffects.bitcrush.value = 0.2; } if (t.type === InstrumentType.COWBELL) { newEffects.reverb.active = true; newEffects.reverb.value = 0.4; } break;
+                  case 'ETHNIC-WORLD': if (t.type === InstrumentType.CHORD) { newEffects.reverb.active = true; newEffects.reverb.value = 0.6; } break;
+                  case 'GABBER': if (t.type === InstrumentType.KICK) { newVol = 1.0; newEffects.bitcrush.active = true; newEffects.bitcrush.value = 0.6; } break;
+                  case 'UK-GARAGE': if (t.type === InstrumentType.HIHAT_CLOSED) newVol = 0.6; break;
+                  case 'ACID': if (t.type === InstrumentType.BASS) { newEffects.delay.active = true; newEffects.delay.value = 0.4; } break;
+                  case 'HARDSTYLE': if (t.type === InstrumentType.KICK) newVol = 1.0; break;
+                  case 'DUBSTEP': if (t.type === InstrumentType.BASS) { newEffects.filter.active = true; newEffects.filter.value = 0.3; } break;
               }
           }
-
-          return {
-              ...t,
-              name: newName,
+          
+          const trackPatterns = t.patterns.map(p => ({
+              ...p,
               pitch: newPitch,
-              volume: newVol,
-              effects: newEffects,
-              patterns: trackPatterns
-          };
-      }));
+              pan: newPan,
+              // Keep steps and automation, reset variation to default for sound consistency
+              variation: 0
+          }));
+          
+          const newVarStates = createVariationStates(newVol, newPan, newPitch);
+
+          return { ...t, name: newName, pitch: newPitch, volume: newVol, pan: newPan, effects: newEffects, patterns: trackPatterns, soundConfig: undefined, variationStates: newVarStates, variation: 0 };
+      });
+      setTracks(newTracks);
+      newTracks.forEach(t => audioSynth.current?.updateTrackParameters(t));
   };
 
   const handlePatternSelect = (patternIndex: number) => {
       addToHistory();
       const currentSceneIdx = activeSceneRef.current;
-      
       setTracks(prev => prev.map(t => {
           if (t.id === selectedTrackId) {
               const targetPattern = t.patterns[patternIndex];
-              return { 
-                  ...t, 
-                  activePatternIdx: patternIndex,
-                  variation: targetPattern.variation,
-                  pitch: targetPattern.pitch,
-                  pan: targetPattern.pan
-              };
+              return { ...t, activePatternIdx: patternIndex, variation: targetPattern.variation, pitch: targetPattern.pitch, pan: targetPattern.pan };
           }
           return t;
       }));
-
       setScenes(prev => {
           const newScenes = [...prev];
-          const newScene = [...newScenes[currentSceneIdx]];
-          newScene[selectedTrackId] = patternIndex;
+          const newScene = { ...newScenes[currentSceneIdx] };
+          if (newScene.trackStates[selectedTrackId]) {
+             newScene.trackStates[selectedTrackId].activePatternIdx = patternIndex;
+          }
           newScenes[currentSceneIdx] = newScene;
           return newScenes;
       });
-
       setStatusMessage(`TRK ${selectedTrackId + 1} -> PTN ${patternIndex + 1}`);
   };
+
+  const handleMatrixPatternSelect = useCallback((trackId: number, patternIndex: number) => {
+      addToHistory();
+      const currentSceneIdx = activeSceneRef.current;
+      setTracks(prev => prev.map(t => {
+          if (t.id === trackId) {
+              const targetPattern = t.patterns[patternIndex];
+              return { ...t, activePatternIdx: patternIndex, variation: targetPattern.variation, pitch: targetPattern.pitch, pan: targetPattern.pan };
+          }
+          return t;
+      }));
+      setScenes(prev => {
+          const newScenes = [...prev];
+          // Update the saved state of the ACTIVE scene to match UI interaction
+          // Because we only 'Snapshot on Exit', we need to keep the scene storage in sync for visual matrix feedback
+          if (newScenes[currentSceneIdx]) {
+              const newScene = { ...newScenes[currentSceneIdx] };
+              if (!newScene.trackStates[trackId]) {
+                  // Fallback if track not in snapshot yet
+                  newScene.trackStates[trackId] = { activePatternIdx: patternIndex } as any; 
+              } else {
+                  newScene.trackStates[trackId].activePatternIdx = patternIndex;
+              }
+              newScenes[currentSceneIdx] = newScene;
+          }
+          return newScenes;
+      });
+      handleSelectTrack(trackId);
+  }, [addToHistory, handleSelectTrack]);
 
   const handleSceneSelect = useCallback((sceneIndex: number) => {
       if (sceneIndex < 0 || sceneIndex >= SCENE_COUNT) return;
       addToHistory();
-      setActiveScene(sceneIndex);
+      
+      const prevSceneIdx = activeSceneRef.current;
+      
+      // 1. Snapshot Current State to Previous Scene
+      const snapshot: SceneData = {
+          genre: selectedGenre,
+          bpm: bpm,
+          trackStates: {}
+      };
+      tracksRef.current.forEach(t => {
+          snapshot.trackStates[t.id] = {
+              volume: t.volume,
+              pan: t.pan,
+              pitch: t.pitch,
+              muted: t.muted,
+              effects: JSON.parse(JSON.stringify(t.effects)),
+              soundConfig: t.soundConfig,
+              sample: t.sample,
+              activePatternIdx: t.activePatternIdx,
+              variation: t.variation,
+              color: t.color
+          };
+      });
+
+      // 2. Load Target Scene Data
       const targetScene = scenesRef.current[sceneIndex];
       
-      setTracks(prev => prev.map(t => {
-         const targetPatternIdx = targetScene[t.id];
-         const targetPattern = t.patterns[targetPatternIdx];
-         return { 
-             ...t, 
-             activePatternIdx: targetPatternIdx,
-             variation: targetPattern.variation,
-             pitch: targetPattern.pitch,
-             pan: targetPattern.pan
-         };
-      }));
-      
+      // Update Scenes Storage
+      const newScenes = [...scenesRef.current];
+      newScenes[prevSceneIdx] = snapshot;
+      setScenes(newScenes);
+      setActiveScene(sceneIndex);
+
+      // 3. Apply Target Scene to Live Tracks
+      if (targetScene) {
+          setSelectedGenre(targetScene.genre);
+          setBpm(targetScene.bpm);
+          if (audioSynth.current) {
+              audioSynth.current.setGenre(targetScene.genre);
+              audioSynth.current.updateBpm(targetScene.bpm);
+          }
+
+          setTracks(prev => prev.map(t => {
+             const savedState = targetScene.trackStates[t.id];
+             if (savedState) {
+                 const updatedTrack = {
+                     ...t,
+                     volume: savedState.volume,
+                     pan: savedState.pan,
+                     pitch: savedState.pitch,
+                     muted: savedState.muted,
+                     effects: JSON.parse(JSON.stringify(savedState.effects)),
+                     soundConfig: savedState.soundConfig,
+                     sample: savedState.sample,
+                     activePatternIdx: savedState.activePatternIdx,
+                     variation: savedState.variation,
+                     color: savedState.color || t.color
+                 };
+                 // Sync with synth
+                 if (audioSynth.current) audioSynth.current.updateTrackParameters(updatedTrack);
+                 return updatedTrack;
+             }
+             // Fallback for new tracks not in old scene: Keep them as is, or reset? Keep as is generally better UX
+             return t;
+          }));
+      }
+
       setStatusMessage(`SCENE ${sceneIndex + 1} LOADED`);
-  }, [addToHistory]);
+  }, [addToHistory, selectedGenre, bpm]);
 
   const handleRandomize = useCallback(() => {
       const randomIndex = Math.floor(Math.random() * LEGENDARY_PATTERNS.length);
@@ -1053,103 +1393,321 @@ const App: React.FC = () => {
     }
   };
 
+  const getEffectiveEffects = (held: Set<number>, latched: Set<number>, slots: MasterEffectType[]) => {
+      const activeIndices = new Set([...held, ...latched]);
+      return Array.from(activeIndices).map(idx => slots[idx]);
+  };
+
+  const updateHeldFx = (indices: Set<number>) => {
+      heldFxRef.current = indices;
+      setHeldFxIndices(new Set<number>(indices)); 
+  };
+
+  const updateLatchedFx = (indices: Set<number>) => {
+      latchedFxRef.current = indices;
+      setLatchedFxIndices(new Set<number>(indices)); 
+  };
+
+  const handleFxPadDown = (index: number) => {
+      setFocusedFxIndex(index);
+      if (latchedFxRef.current.has(index)) {
+          const newLatched = new Set<number>(latchedFxRef.current);
+          newLatched.delete(index);
+          updateLatchedFx(newLatched);
+          setStatusMessage("FX UNLATCHED");
+          
+          const newHeld = new Set<number>(heldFxRef.current);
+          newHeld.add(index);
+          updateHeldFx(newHeld);
+          const effects = getEffectiveEffects(newHeld, newLatched, fxSlots);
+          audioSynth.current?.applyMasterEffects(effects);
+      } else {
+          const newHeld = new Set<number>(heldFxRef.current);
+          newHeld.add(index);
+          updateHeldFx(newHeld);
+          const effects = getEffectiveEffects(newHeld, latchedFxRef.current, fxSlots);
+          audioSynth.current?.applyMasterEffects(effects);
+      }
+  };
+
+  const handleFxPadUp = (index: number) => {
+      const newHeld = new Set<number>(heldFxRef.current);
+      if (newHeld.has(index)) {
+          newHeld.delete(index);
+          updateHeldFx(newHeld);
+          const effects = getEffectiveEffects(newHeld, latchedFxRef.current, fxSlots);
+          audioSynth.current?.applyMasterEffects(effects);
+      }
+  };
+
+  const toggleLatch = (index: number, e: React.MouseEvent | React.TouchEvent) => {
+      e.stopPropagation(); e.preventDefault();
+      
+      // NEW: Focus the FX when latched
+      setFocusedFxIndex(index);
+      
+      const newLatched = new Set<number>(latchedFxRef.current);
+      if (newLatched.has(index)) {
+          newLatched.delete(index);
+          setStatusMessage("FX UNLATCHED");
+      } else {
+          newLatched.add(index);
+          setStatusMessage(`FX LATCHED`);
+      }
+      updateLatchedFx(newLatched);
+      const effects = getEffectiveEffects(heldFxRef.current, newLatched, fxSlots);
+      audioSynth.current?.applyMasterEffects(effects);
+  };
+  
+  const handleFxSlotChange = (slotIndex: number, typeStr: string) => {
+      const type = typeStr as MasterEffectType;
+      const newSlots = [...fxSlots];
+      newSlots[slotIndex] = type;
+      setFxSlots(newSlots);
+      if (!fxParamState[type]) {
+          const defaults = audioSynth.current?.getMasterFxParams(type) || [0.8, 0.5, 0.5, 0.8];
+          setFxParamState(prev => ({ ...prev, [type]: defaults }));
+      }
+      if (heldFxRef.current.has(slotIndex) || latchedFxRef.current.has(slotIndex)) {
+          const effects = getEffectiveEffects(heldFxRef.current, latchedFxRef.current, newSlots);
+          audioSynth.current?.applyMasterEffects(effects);
+      }
+  };
+  
+  const handleFxParamChange = (paramIdx: 0 | 1 | 2 | 3, value: number) => {
+      const activeType = fxSlots[focusedFxIndex];
+      if (!activeType || !audioSynth.current) return;
+      setFxParamState(prev => {
+          const currentParams = prev[activeType] || [0.8, 0.5, 0.5, 0.8];
+          const newParams = [...currentParams] as [number, number, number, number];
+          newParams[paramIdx] = value;
+          return { ...prev, [activeType]: newParams };
+      });
+      audioSynth.current.setMasterFxParam(activeType, paramIdx, value);
+      if (heldFxIndices.has(focusedFxIndex) || latchedFxIndices.has(focusedFxIndex)) {
+          const effects = getEffectiveEffects(heldFxRef.current, latchedFxRef.current, fxSlots);
+          audioSynth.current.applyMasterEffects(effects);
+      }
+  };
+
+  const openLibrary = (trackId: number) => {
+      setLibraryTargetTrackId(trackId);
+      setIsLibraryOpen(true);
+  };
+
+  const closeLibrary = () => {
+      setIsLibraryOpen(false);
+      setLibraryTargetTrackId(null);
+  };
+
+  const handleAddSample = async (fileOrBlob: File | Blob, name: string) => {
+    if (!audioSynth.current) return;
+    try {
+        const arrayBuffer = await fileOrBlob.arrayBuffer();
+        const audioBuffer = await audioSynth.current.getContext().decodeAudioData(arrayBuffer);
+        const newSample: UserSample = { id: Date.now().toString(), name: name, buffer: audioBuffer, date: Date.now() };
+        setUserSamples(prev => [...prev, newSample]);
+        setStatusMessage("SAMPLE IMPORTED");
+    } catch (e) {
+        console.error("Error importing sample", e);
+        setStatusMessage("IMPORT ERROR");
+    }
+  };
+
+  const handleDeleteSample = (id: string) => setUserSamples(prev => prev.filter(s => s.id !== id));
+  const handleRenameSample = (id: string, newName: string) => setUserSamples(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
+
+  const handleSoundSelect = (item: LibraryItem | UserSample, isUserSample: boolean) => {
+      if (libraryTargetTrackId === null) return;
+      
+      const libItem = item as LibraryItem;
+      const movedSample = !isUserSample && libItem.isCustom && libItem.buffer;
+      
+      addToHistory();
+      setTracks(prev => prev.map(t => {
+          if (t.id === libraryTargetTrackId) {
+              if (isUserSample || movedSample) {
+                  const buf = isUserSample ? (item as UserSample).buffer : libItem.buffer!;
+                  return {
+                      ...t,
+                      name: item.name,
+                      sample: { buffer: buf, start: 0, end: 1, isCustom: true, stretch: false },
+                      soundConfig: undefined 
+                  };
+              } else {
+                  return {
+                      ...t,
+                      name: item.name,
+                      soundConfig: { genre: libItem.genre, type: libItem.type, name: libItem.name },
+                      sample: t.sample ? { ...t.sample, isCustom: false, start: 0, end: 1 } : undefined
+                  };
+              }
+          }
+          return t;
+      }));
+      setStatusMessage(`ASSIGNED: ${item.name}`);
+      closeLibrary();
+  };
+  
+  const handlePreviewSound = (item: LibraryItem | UserSample) => {
+      if (!audioSynth.current) return;
+      
+      const libItem = item as LibraryItem;
+      const isCustom = (item as any).buffer !== undefined || libItem.isCustom;
+      
+      if (isCustom) {
+           const buf = (item as any).buffer || libItem.buffer;
+           audioSynth.current.previewSound({ type: InstrumentType.KICK, genre: 'USER', sample: buf });
+      } else {
+           audioSynth.current.previewSound({ type: libItem.type, genre: libItem.genre });
+      }
+  };
+
+  const handleMoveToPresets = (sample: UserSample) => {
+      setSoundLibrary(prev => {
+          const newLib = [...prev];
+          let userCatIndex = newLib.findIndex(c => c.id === 'USER_IMPORTED');
+          
+          const newItem: LibraryItem = {
+              name: sample.name,
+              genre: 'USER',
+              type: InstrumentType.KICK, // Default fallback
+              buffer: sample.buffer,
+              isCustom: true
+          };
+
+          if (userCatIndex === -1) {
+              newLib.unshift({
+                  id: 'USER_IMPORTED',
+                  label: 'IMPORTED SAMPLES',
+                  items: [newItem]
+              });
+          } else {
+              // Avoid dupes
+              if (!newLib[userCatIndex].items.some(i => i.name === newItem.name)) {
+                   newLib[userCatIndex] = {
+                       ...newLib[userCatIndex],
+                       items: [...newLib[userCatIndex].items, newItem]
+                   };
+              }
+          }
+          return newLib;
+      });
+      setStatusMessage("MOVED TO PRESETS");
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       const isContinuous = ['=', '+', '-', '_', 'arrowup', 'arrowdown'].includes(key);
       if (e.repeat && !isContinuous) return;
 
-      if (key === 'tab') { e.preventDefault(); setIsRecording(prev => !prev); return; }
       if (key === 'delete' || key === 'backspace') { if (key === 'backspace') e.preventDefault(); handleClearTrack(); return; }
       if ((e.metaKey || e.ctrlKey) && key === 'l') { e.preventDefault(); handleToggleLock(); return; }
       if ((e.metaKey || e.ctrlKey) && key === 'z') { e.preventDefault(); handleUndo(); return; }
-      
-      if (!e.repeat && key >= '1' && key <= '9') {
-          e.preventDefault();
-          const sceneIdx = parseInt(key) - 1;
-          handleSceneSelect(sceneIdx);
-          return;
-      }
+      if (!e.repeat && key >= '1' && key <= '8') { e.preventDefault(); handleSceneSelect(parseInt(key) - 1); return; }
 
-      if (e.key === 'ArrowUp') { e.preventDefault(); setTracks(prev => { const t = prev.find(tr => tr.id === selectedTrackId); if (!t) return prev; const newVol = Math.min(1.0, t.volume + 0.1); setStatusMessage(`VOL: ${Math.round(newVol * 100)}%`); return prev.map(tr => tr.id === selectedTrackId ? { ...tr, volume: newVol } : tr); }); }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setTracks(prev => { const t = prev.find(tr => tr.id === selectedTrackId); if (!t) return prev; const newVol = Math.max(0.0, t.volume - 0.1); setStatusMessage(`VOL: ${Math.round(newVol * 100)}%`); return prev.map(tr => tr.id === selectedTrackId ? { ...tr, volume: newVol } : tr); }); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setTracks(prev => { const t = prev.find(tr => tr.id === selectedTrackId); if (!t) return prev; const newVol = Math.min(1.0, t.volume + 0.1); setStatusMessage(`VOL: ${Math.round(newVol * 100)}%`); const updated = { ...t, volume: newVol }; audioSynth.current?.updateTrackParameters(updated); return prev.map(tr => tr.id === selectedTrackId ? updated : tr); }); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setTracks(prev => { const t = prev.find(tr => tr.id === selectedTrackId); if (!t) return prev; const newVol = Math.max(0.0, t.volume - 0.1); setStatusMessage(`VOL: ${Math.round(newVol * 100)}%`); const updated = { ...t, volume: newVol }; audioSynth.current?.updateTrackParameters(updated); return prev.map(tr => tr.id === selectedTrackId ? updated : tr); }); }
       
       if (key === '=' || key === '+') { adjustBpm(1); }
       if (key === '-' || key === '_') { adjustBpm(-1); }
-
       if (key === 'm') { handleMuteToggle(selectedTrackId); }
-      
       if (!e.repeat && KEY_MAP[key] !== undefined) { 
           const id = KEY_MAP[key]; 
           if (tracksRef.current.find(t => t.id === id)) { 
               handlePadTrigger(id); 
-              setSelectedTrackId(id); 
+              // Optimization: Only select if different to avoid potential re-render triggers
+              if (selectedTrackIdRef.current !== id) {
+                  handleSelectTrack(id); 
+              }
           } 
       }
-      
-      if (!e.repeat && e.key === "'") { 
-          const currentTrack = tracksRef.current.find(t => t.id === selectedTrackId); 
-          if (currentTrack) { 
-             let nextVar = 0;
-             if (currentTrack.variation === 0) nextVar = 1;
-             else if (currentTrack.variation === 1) nextVar = 3;
-             else if (currentTrack.variation === 3) nextVar = 2;
-             else if (currentTrack.variation === 2) nextVar = 0;
-             handleVariationSelect(selectedTrackId, nextVar); 
-          } 
-      }
-
+      if (!e.repeat && e.key === "'") { const currentTrack = tracksRef.current.find(t => t.id === selectedTrackId); if (currentTrack) { let nextVar = (currentTrack.variation === 0 ? 1 : (currentTrack.variation === 1 ? 3 : (currentTrack.variation === 3 ? 2 : 0))); handleVariationSelect(selectedTrackId, nextVar); } }
       if (!e.repeat && e.code === 'Space') { e.preventDefault(); togglePlay(); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTrackId, handlePadTrigger, handleVariationSelect, togglePlay, handleMuteToggle, adjustBpm, handleToggleLock, handleUndo, handleSceneSelect]); 
+  }, [selectedTrackId, handlePadTrigger, handleVariationSelect, togglePlay, handleMuteToggle, adjustBpm, handleToggleLock, handleUndo, handleSceneSelect, handleSelectTrack]); 
 
-  const selectedTrack = tracks.find(t => t.id === selectedTrackId) || tracks[0];
   const currentPattern = selectedTrack.patterns[selectedTrack.activePatternIdx];
-  const hasSample = selectedTrack.sample?.isCustom && selectedTrack.sample.buffer;
+  const lcdPatternName = legendaryPatternIdx !== null ? `HIST: ${LEGENDARY_PATTERNS[legendaryPatternIdx].name}` : `SCN:${activeScene + 1} / PTN:${selectedTrack.activePatternIdx + 1}`;
+  const legendaryCountDisplay = legendaryPatternIdx !== null ? `${(legendaryPatternIdx + 1).toString().padStart(2, '0')}/${LEGENDARY_PATTERNS.length}` : "FREE"; 
+  const isPitchLengthLocked = selectedTrack.sample?.stretch || false;
+  const trackColorClass = (colorName: string) => {
+      const map: Record<string, string> = { red: 'bg-red-500', orange: 'bg-orange-500', amber: 'bg-amber-500', yellow: 'bg-yellow-400', lime: 'bg-lime-500', green: 'bg-green-600', emerald: 'bg-emerald-500', teal: 'bg-teal-500', cyan: 'bg-cyan-500', sky: 'bg-sky-500', blue: 'bg-blue-600', indigo: 'bg-indigo-500', violet: 'bg-violet-500', purple: 'bg-purple-600', fuchsia: 'bg-fuchsia-500', pink: 'bg-pink-500', rose: 'bg-rose-500', white: 'bg-white' };
+      return map[colorName] || 'bg-gray-500';
+  };
+  const renderPads = () => {
+    return (
+        <div className="grid grid-cols-5 gap-1 content-start">
+            {Array.from({length: 15}).map((_, id) => {
+                const track = tracks.find(t => t.id === id);
+                const shortcut = Object.keys(KEY_MAP).find(k => KEY_MAP[k] === id) || '';
+                
+                if (track) {
+                    return ( 
+                        <PadMix 
+                            key={track.id} 
+                            ref={(el) => { padMixRefs.current[track.id] = el }} 
+                            track={track} 
+                            isSelected={selectedTrackId === track.id} 
+                            onSelect={handleSelectTrack} 
+                            onSelectVariation={handleVariationSelect} 
+                            onTrigger={handlePadTrigger} 
+                            onToggleMute={handleMuteToggle} 
+                            onOpenLibrary={openLibrary} 
+                            onUpdateVolume={handleVolumeChange} 
+                            onUpdatePitch={handleTrackPitchChange} 
+                            onUpdateEffect={handleEffectChange} 
+                            onDelete={handleDeleteTrack} 
+                            onColorChange={handleColorChange} 
+                            shortcutKey={shortcut} 
+                            currentStep={currentStep} 
+                            isPlaying={isPlaying} 
+                        /> 
+                    );
+                } else {
+                    return ( 
+                        <button 
+                            key={id} 
+                            onClick={() => handleAddTrack(id)} 
+                            className="w-full aspect-square bg-[#2a2a2a] rounded-sm border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-1 hover:bg-[#333] hover:border-white/30 transition-all group text-neutral-600 hover:text-white relative"
+                        >
+                            <div className="absolute top-1 left-1 text-[8px] font-mono font-bold text-neutral-500 opacity-60">{shortcut.toUpperCase()}</div>
+                            <PlusIcon className="w-6 h-6 opacity-30 group-hover:opacity-100 transition-transform" />
+                            <span className="text-[7px] font-bold tracking-widest uppercase opacity-50 group-hover:opacity-100">ADD</span>
+                        </button> 
+                    );
+                }
+            })}
+        </div>
+    );
+  }
   
-  const lcdPatternName = legendaryPatternIdx !== null 
-      ? `HIST: ${LEGENDARY_PATTERNS[legendaryPatternIdx].name}` 
-      : `SCN:${activeScene + 1} / PTN:${selectedTrack.activePatternIdx + 1}`;
-
-  const legendaryCountDisplay = legendaryPatternIdx !== null 
-      ? `${(legendaryPatternIdx + 1).toString().padStart(2, '0')}/${LEGENDARY_PATTERNS.length}`
-      : "FREE"; 
+  const currentFxType = fxSlots[focusedFxIndex];
+  // Default is [mix, A, B, Volume=0.8]
+  const currentFxParams = fxParamState[currentFxType] || [0.8, 0.5, 0.5, 0.8];
+  const focusedFxInfo = FX_INFO[currentFxType];
+  const focusedFxLabels = FX_PARAM_DEFS[currentFxType];
 
   return (
     <div className="min-h-screen w-full bg-[#222] flex items-start justify-center p-2 overflow-y-auto">
+      <SoundLibraryModal 
+         isOpen={isLibraryOpen}
+         onClose={closeLibrary}
+         onSelect={handleSoundSelect}
+         currentTrackName={libraryTargetTrackId !== null ? tracks.find(t => t.id === libraryTargetTrackId)?.name || '' : ''}
+         userSamples={userSamples}
+         library={soundLibrary}
+         onAddSample={handleAddSample}
+         onDeleteSample={handleDeleteSample}
+         onRenameSample={handleRenameSample}
+         onPreview={handlePreviewSound}
+         onMoveToPresets={handleMoveToPresets}
+      />
       <div className="w-full flex flex-col items-center" style={{ '--bpm-duration': `${60/bpm}s` } as React.CSSProperties}>
-
-        <style>{`
-            @keyframes chillPulse {
-                0% { color: #a5b4fc; filter: brightness(1.1); }
-                50% { color: #5eead4; filter: brightness(1.2); }
-                100% { color: #a5b4fc; filter: brightness(1.1); }
-            }
-            .animate-chill-pulse { animation: chillPulse calc(var(--bpm-duration) * 4) infinite ease-in-out; }
-            @keyframes breatheGlow {
-                0%, 100% { box-shadow: 0 0 5px rgba(34,197,94,0.3), inset 0 0 10px rgba(255,255,255,0.1); border-color: #22c55e; }
-                50% { box-shadow: 0 0 20px rgba(34,197,94,0.8), inset 0 0 20px rgba(255,255,255,0.2); border-color: #86efac; }
-            }
-            .animate-breathe-glow { animation: breatheGlow 1.5s ease-in-out infinite; }
-
-            @keyframes rainbowBorder {
-                0% { border-color: #ff0000; box-shadow: 0 0 8px #ff0000; }
-                14% { border-color: #ff7f00; box-shadow: 0 0 8px #ff7f00; }
-                28% { border-color: #ffff00; box-shadow: 0 0 8px #ffff00; }
-                42% { border-color: #00ff00; box-shadow: 0 0 8px #00ff00; }
-                57% { border-color: #0000ff; box-shadow: 0 0 8px #0000ff; }
-                71% { border-color: #4b0082; box-shadow: 0 0 8px #4b0082; }
-                85% { border-color: #9400d3; box-shadow: 0 0 8px #9400d3; }
-                100% { border-color: #ff0000; box-shadow: 0 0 8px #ff0000; }
-            }
-            .animate-rgb-lock {
-                 animation: rainbowBorder 2s linear infinite;
-            }
-        `}</style>
-
-        <div className="w-full max-w-[1800px] bg-[#dcdcdc] rounded-sm shadow-[0_50px_100px_rgba(0,0,0,0.6)] border border-[#aaa] relative flex flex-col h-auto">
+        <div className="w-full max-w-[1800px] bg-[#dcdcdc] rounded-sm shadow-[0_50px_100px_rgba(0,0,0,0.6)] border border-[#aaa] relative flex flex-col h-auto min-h-0">
                 
                 <div className="h-8 bg-[#222] border-b border-white/10 w-full flex items-center justify-between px-4 flex-shrink-0 shadow-md">
                     <div className="flex items-center gap-4">
@@ -1161,331 +1719,273 @@ const App: React.FC = () => {
                     <div className="text-[9px] text-neutral-500 font-mono tracking-widest hidden sm:block">UNIT 01 // LEGENDARY SERIES</div>
                 </div>
 
-                <div className="flex-1 p-3 flex flex-col gap-3">
+                <div className="flex-1 p-3 flex flex-col gap-3 min-h-0">
                     
-                    <div className="flex flex-col lg:flex-row gap-3 h-auto lg:h-auto shrink-0">
+                    <div className="flex flex-col xl:flex-row gap-3 h-auto shrink-0">
                         
-                        <div className="flex gap-3 flex-1">
-                            <PitchModWheels 
-                                onPitchChange={handlePitchWheel} 
-                                onModChange={handleModWheel}
-                                pitchValue={selectedTrack.pitch / 3}
-                                modValue={modValue}
-                            />
-
-                            <div className="flex flex-col gap-2 flex-1">
-                                <LCDDisplay 
-                                    bpm={bpm} 
-                                    patternName={lcdPatternName}
-                                    isPlaying={isPlaying}
-                                    isRecording={isRecording}
-                                    statusMessage={statusMessage}
-                                    metronomeEnabled={metronomeEnabled}
-                                    sampleBuffer={selectedTrack.sample?.buffer}
-                                    previewBuffer={previewBuffer}
-                                    sampleStart={selectedTrack.sample?.start}
-                                    sampleEnd={selectedTrack.sample?.end}
-                                    isSampling={isSampling}
-                                    onSampleUpdate={handleSampleRegionUpdate}
-                                    recordingAnalyser={recordingAnalyser}
-                                />
-                                
-                                <div className="flex gap-2 h-12 items-center">
-                                    <button onClick={() => setIsRecording(!isRecording)} className={`w-20 h-full flex items-center justify-center rounded-sm font-bold shadow-[0_3px_0_rgba(0,0,0,0.2)] transition-all active:shadow-none active:translate-y-[3px] border border-black/10 ${isRecording ? 'bg-red-600 text-white' : 'bg-[#e0e0e0] text-red-600'}`}>
-                                        <span className="text-xs">REC</span>
-                                    </button>
-
-                                    <div className="flex items-center justify-center gap-2 bg-[#d4d4d4] border border-white/50 px-2 h-full rounded-sm shadow-inner flex-1 lg:flex-none">
-                                        <button 
-                                            onPointerDown={startSampling}
-                                            onPointerUp={stopSampling}
-                                            onPointerLeave={stopSampling}
-                                            onTouchStart={(e) => { e.preventDefault(); startSampling(); }}
-                                            onTouchEnd={(e) => { e.preventDefault(); stopSampling(); }}
-                                            className={`
-                                                w-12 h-10 rounded-sm border-b-2 active:border-b-0 active:translate-y-[2px] transition-all flex items-center justify-center
-                                                ${isSampling 
-                                                    ? 'bg-red-500 text-white border-red-700 shadow-[0_0_10px_rgba(239,68,68,0.8)]' 
-                                                    : 'bg-[#e0e0e0] text-neutral-600 border-neutral-400 hover:bg-white'}
-                                            `}
-                                        >
-                                            <MicrophoneIcon className="w-5 h-5" />
-                                        </button>
-                                        
-                                        {hasSample && (
-                                            <button 
-                                                onClick={handleSampleClear}
-                                                className="w-6 h-6 bg-neutral-300 hover:bg-red-200 text-neutral-500 hover:text-red-500 rounded-full flex items-center justify-center ml-2 active:scale-90 transition-transform"
-                                                title="Restore Original Sound"
-                                            >
-                                                <TrashIcon className="w-3 h-3" />
-                                            </button>
-                                        )}
-                                    </div>
-                                    
-                                    <button 
-                                        onClick={togglePlay} 
-                                        className={`
-                                            flex-1 h-full rounded-sm font-bold flex items-center justify-center gap-2 transition-all border 
-                                            ${isPlaying 
-                                                ? 'bg-green-600 text-white animate-breathe-glow translate-y-[3px]' 
-                                                : 'bg-[#e0e0e0] text-neutral-800 border-black/10 shadow-[0_3px_0_rgba(0,0,0,0.2)] active:translate-y-[3px] active:shadow-none'
-                                            }
-                                        `}
-                                    >
-                                        {isPlaying ? <StopIcon className="w-6 h-6"/> : <PlayIcon className="w-6 h-6"/>}
-                                        <span className="text-sm font-black tracking-wider">{isPlaying ? "STOP" : "PLAY"}</span>
-                                    </button>
-
-                                    <div className="flex flex-col items-center gap-1 h-full justify-between py-0.5">
-                                        <div className="bg-[#222] text-[#5eead4] font-['VT323'] text-lg leading-none px-2 pt-0.5 rounded-sm border border-white/10 shadow-[inset_0_0_4px_rgba(0,0,0,0.5)] w-full text-center tracking-widest min-w-[80px] flex-1 flex items-center justify-center">
-                                            {legendaryCountDisplay}
-                                        </div>
-
-                                        <div className="flex items-center bg-[#aaa] rounded-sm p-0.5 gap-1 shadow-[0_3px_0_rgba(0,0,0,0.3)] border border-white/20 h-6">
-                                            <button onClick={handlePrevPattern} className="w-8 h-full rounded-sm bg-[#ccc] hover:bg-white active:bg-neutral-400 flex items-center justify-center active:scale-95 transition-transform"><ChevronLeftIcon className="w-3 h-3 text-neutral-700"/></button>
-                                            
-                                            {/* --- BIGGER RANDOM BUTTON --- */}
-                                            <button 
-                                                onMouseDown={startRandomizing} 
-                                                onMouseUp={stopRandomizing} 
-                                                onMouseLeave={stopRandomizing} 
-                                                onTouchStart={(e) => { e.preventDefault(); startRandomizing(); }} 
-                                                onTouchEnd={(e) => { e.preventDefault(); stopRandomizing(); }} 
-                                                className="w-16 h-full bg-orange-500 text-white hover:bg-orange-400 active:bg-orange-600 flex items-center justify-center transition-colors rounded-sm shadow-inner group relative"
-                                            >
-                                                <CubeIcon className="w-3 h-3 absolute left-1 top-1/2 -translate-y-1/2 opacity-70" />
-                                                <BoltIcon className="w-4 h-4 absolute right-1 top-1/2 -translate-y-1/2" />
-                                            </button>
-                                            
-                                            <button onClick={handleNextPattern} className="w-8 h-full rounded-sm bg-[#ccc] hover:bg-white active:bg-neutral-400 flex items-center justify-center active:scale-95 transition-transform"><ChevronRightIcon className="w-3 h-3 text-neutral-700"/></button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-[#ccc] rounded-sm p-3 border border-white/50 shadow-inner flex items-center justify-around relative w-full lg:w-80">
-                            <div className="flex flex-col items-center justify-center gap-2 w-full h-full">
-                                <div className="flex items-center justify-center gap-4">
+                        <div className="bg-[#ccc] rounded-sm p-2 border border-white/50 shadow-inner flex items-center justify-center relative w-full xl:w-80 h-auto sm:h-56 shrink-0">
+                            <div className="grid grid-cols-4 gap-2 w-full h-full">
+                                <div className="col-span-2 row-span-2 bg-[#e0e0e0] rounded-sm border border-white/50 shadow-sm flex flex-col items-center justify-center gap-1 p-1">
                                      <TempoKnob bpm={bpm} onChange={setBpm} />
-                                     <div className="flex flex-col items-start">
-                                         <span className="text-4xl font-black text-neutral-700 font-['VT323'] leading-none">{bpm}</span>
-                                         <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">BPM</span>
+                                     <div className="flex flex-col items-center leading-none">
+                                         <span className="text-3xl font-black text-neutral-700 font-['VT323']">{bpm}</span>
+                                         <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider">BPM</span>
                                      </div>
                                 </div>
-                                <div className="flex gap-2 w-full px-2">
-                                    <button onClick={handleUndo} className="flex-1 h-10 rounded-md bg-[#e0e0e0] text-[#666] border-b-[4px] border-[#bbb] hover:bg-white flex items-center justify-center gap-2 active:translate-y-[2px] active:border-b-0 shadow-sm group">
-                                        <ArrowUturnLeftIcon className="w-4 h-4 group-active:-rotate-45 transition-transform" /> <span className="text-[9px]">UNDO</span>
-                                    </button>
-                                    <button onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={`flex-1 h-10 rounded-md font-bold border-b-[4px] flex items-center justify-center gap-2 transition-all active:translate-y-[2px] active:border-b-0 active:shadow-none shadow-sm ${metronomeEnabled ? 'bg-[#333] text-white border-black' : 'bg-[#e0e0e0] text-neutral-600 border-[#bbb]'}`}>
-                                        <ClockIcon className="w-4 h-4" /> <span className="text-[9px]">CLK</span>
-                                    </button>
-                                    <button onClick={handleClearAll} className="flex-1 h-10 rounded-md bg-[#e0e0e0] text-[#666] border-b-[4px] border-[#bbb] hover:bg-red-100 flex items-center justify-center gap-2 active:translate-y-[2px] active:border-b-0 shadow-sm">
-                                        <TrashIcon className="w-4 h-4" /> <span className="text-[9px]">ALL</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="w-full flex flex-col items-center justify-center py-2 bg-[#d4d4d4] rounded-sm border border-white/50 shadow-sm"> 
-                        <div className="flex items-center gap-2 mb-1 opacity-60">
-                            <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></div>
-                            <span className="text-xs font-black text-neutral-500 tracking-[0.3em] uppercase">Global Scenes (KEYS 1-9)</span>
-                            <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></div>
-                        </div>
-                        <div className="flex gap-1.5 justify-center w-full overflow-x-auto px-4 pb-1 scrollbar-hide">
-                            {Array.from({length: SCENE_COUNT}).map((_, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => handleSceneSelect(i)}
-                                    className={`
-                                        min-w-[2.5rem] h-10 flex flex-col items-center justify-center relative overflow-hidden transition-all duration-100
-                                        rounded-sm border-b-[3px] shadow-sm
-                                        ${activeScene === i 
-                                            ? 'bg-white text-black translate-y-[1px] shadow-none ring-2 ring-neutral-400 z-10 border-transparent' 
-                                            : `${SCENE_COLORS[i % SCENE_COLORS.length]} text-white border-black/20 active:border-b-0 active:translate-y-[3px] hover:brightness-110 opacity-90 hover:opacity-100`}
-                                    `}
-                                >
-                                    <span className="text-[7px] opacity-60 mb-0.5 font-bold">SCN</span>
-                                    <span className="text-sm font-black leading-none">{i + 1}</span>
+                                <button onClick={togglePlay} className={`col-span-2 h-full rounded-sm font-bold flex items-center justify-center gap-2 transition-all border ${isPlaying ? 'bg-green-600 text-white animate-breathe-glow translate-y-[2px]' : 'bg-[#dcdcdc] text-neutral-800 border-black/10 shadow-[0_3px_0_rgba(0,0,0,0.2)] active:translate-y-[2px] active:shadow-none hover:bg-white'}`}>
+                                    {isPlaying ? <StopIcon className="w-6 h-6"/> : <PlayIcon className="w-6 h-6"/>}
                                 </button>
-                            ))}
+                                <button onClick={toggleRecording} className={`h-10 flex items-center justify-center rounded-sm font-bold shadow-[0_2px_0_rgba(0,0,0,0.2)] transition-all active:shadow-none active:translate-y-[2px] border border-black/10 ${isRecording ? 'bg-red-600 text-white' : 'bg-[#dcdcdc] hover:bg-white text-red-600'}`}>
+                                    <span className="text-[10px] font-black">REC</span>
+                                </button>
+                                <button onPointerDown={startSampling} onPointerUp={stopSampling} onPointerLeave={stopSampling} className={`h-10 rounded-sm border-b-2 active:border-b-0 active:translate-y-[2px] transition-all flex items-center justify-center ${isSampling ? 'bg-red-500 text-white border-red-700 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#dcdcdc] text-neutral-600 border-neutral-400 hover:bg-white'}`}>
+                                    <MicrophoneIcon className="w-4 h-4" />
+                                </button>
+                                <button onClick={handleUndo} className="h-8 rounded-sm bg-[#dcdcdc] text-[#666] border-b-[2px] border-[#bbb] hover:bg-white flex items-center justify-center active:translate-y-[2px] active:border-b-0 shadow-sm group" title="Undo">
+                                    <ArrowUturnLeftIcon className="w-3 h-3 group-active:-rotate-45 transition-transform" />
+                                </button>
+                                <button onClick={handleToggleLock} className={`h-8 rounded-sm flex items-center justify-center transition-all border-b-[2px] active:border-b-0 active:translate-y-[2px] ${isLocked ? 'animate-rgb-lock text-white border-transparent bg-neutral-900' : 'bg-[#dcdcdc] text-neutral-600 border-[#bbb] shadow-sm hover:bg-white'}`}>
+                                    {isLocked ? <LockClosedIcon className="w-3 h-3" /> : <LockOpenIcon className="w-3 h-3" />}
+                                </button>
+                                <button onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={`h-8 rounded-sm font-bold border-b-[2px] flex items-center justify-center transition-all active:translate-y-[2px] active:border-b-0 shadow-sm ${metronomeEnabled ? 'bg-[#333] text-white border-black' : 'bg-[#dcdcdc] text-neutral-600 border-[#bbb] hover:bg-white'}`}>
+                                    <ClockIcon className="w-3 h-3" />
+                                </button>
+                                <button onClick={handleClearTrack} className="h-8 rounded-sm font-bold border-b-[2px] flex items-center justify-center transition-all active:translate-y-[2px] active:border-b-0 shadow-sm bg-[#dcdcdc] text-neutral-600 border-[#bbb] hover:bg-red-100 hover:text-red-500">
+                                    <TrashIcon className="w-3 h-3" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-1 gap-2 h-56 min-w-0">
+                            <PitchModWheels onPitchChange={handlePitchWheel} pitchValue={selectedTrack.pitch / 3} isLocked={isPitchLengthLocked} onToggleLock={handleToggleStretch} />
+                            <div className="flex flex-col gap-2 flex-1 h-full min-w-0">
+                                <LCDDisplay bpm={bpm} patternName={lcdPatternName} isPlaying={isPlaying} isRecording={isRecording} statusMessage={statusMessage} metronomeEnabled={metronomeEnabled} sampleBuffer={selectedTrack.sample?.buffer} previewBuffer={previewBuffer} sampleStart={selectedTrack.sample?.start} sampleEnd={selectedTrack.sample?.end} isSampling={isSampling} isStretch={selectedTrack.sample?.stretch} onSampleUpdate={handleSampleRegionUpdate} recordingAnalyser={recordingAnalyser} onClearSample={handleClearSample} isTrackEmpty={selectedTrack.name === 'EMPTY'} />
+                            </div>
                         </div>
                     </div>
 
-                    <div className="bg-[#e0e0e0] p-2 rounded-sm border border-white shadow-sm shrink-0 flex flex-col gap-2">
+                    <div className="flex flex-col lg:flex-row gap-2 h-[340px] shrink-0"> {/* Reduced height and gap */}
                         
-                        <div className="bg-[#ccc] rounded-sm p-1.5 border border-white/20 shadow-inner w-full">
-                            <div className="flex justify-between items-center mb-1 opacity-60 px-1">
-                                <div className="flex items-center gap-2">
-                                    <BoltIcon className="w-3 h-3 text-neutral-600"/>
-                                    <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">QUICK FILL</span>
-                                </div>
-                                <span className="text-[9px] font-mono text-neutral-500">28 PRESETS</span>
-                            </div>
-                            
-                            {/* --- COMPACT HORIZONTAL LAYOUT (NO SCROLL) --- */}
-                            <div className="flex flex-wrap gap-[2px] h-6 overflow-hidden content-start">
-                                {FILL_BUTTONS.map((fill, idx) => {
-                                    let bgClass = 'bg-[#e0e0e0] hover:bg-white text-neutral-700';
-                                    if (fill.cat === 'func') bgClass = 'bg-neutral-300 hover:bg-neutral-200 text-neutral-800';
-                                    if (fill.cat === 'genre') bgClass = 'bg-blue-100 hover:bg-blue-50 text-blue-800';
-                                    if (fill.cat === 'rand') bgClass = 'bg-orange-100 hover:bg-orange-50 text-orange-800';
-                                    if (fill.cat === 'eucl') bgClass = 'bg-emerald-100 hover:bg-emerald-50 text-emerald-800';
-                                    if (fill.cat === 'tuple') bgClass = 'bg-purple-100 hover:bg-purple-50 text-purple-800';
+                        {/* LEFT: JAM MATRIX (SCENES & PATTERNS) */}
+                        <div className="flex-[6.5] bg-[#1a1a1a] rounded-sm border border-black/30 shadow-inner flex flex-col p-1 gap-0.5 overflow-hidden">
+                             {/* HEADER ALIGNED WITH COLUMNS */}
+                             <div className="flex gap-1 h-5 w-full shrink-0 pr-1"> 
+                                 <div className="w-20 shrink-0 border-r border-white/5 bg-[#222] flex items-center justify-end px-2">
+                                     <span className="text-[9px] font-black text-neutral-500 tracking-wider">SCENES</span>
+                                 </div>
+                                 <div className="flex-1 grid grid-cols-8 gap-[2px]"> {/* CHANGED FROM flex to grid */}
+                                     {Array.from({length: SCENE_COUNT}).map((_, i) => (
+                                         <button key={i} onClick={() => handleSceneSelect(i)} className={`flex-1 rounded-[1px] flex flex-col items-center justify-center transition-all ${activeScene === i ? 'bg-white text-black' : `${SCENE_COLORS[i]} text-white/90 opacity-80 hover:opacity-100`}`}>
+                                             <span className="text-[9px] font-black leading-none">{i + 1}</span>
+                                         </button>
+                                     ))}
+                                 </div>
+                             </div>
+                             
+                             {/* TRACK LIST */}
+                             <div className="flex-1 flex flex-col gap-[2px] overflow-y-auto pr-1 custom-scrollbar">
+                                {Array.from({length: 15}).map((_, i) => {
+                                    const track = tracks.find(t => t.id === i);
+                                    
+                                    if (!track) {
+                                        // Empty Slot
+                                        return (
+                                            <div key={i} className="flex items-center gap-1 h-6 shrink-0 opacity-30 select-none grayscale pointer-events-none">
+                                                <div className="w-20 shrink-0 text-[9px] font-bold text-right pr-2 border-r border-white/10 text-neutral-700 font-mono">
+                                                    --
+                                                </div>
+                                                <div className="flex-1 grid grid-cols-8 gap-[2px] h-full">
+                                                     {Array.from({length: 8}).map((_, p) => (
+                                                         <div key={p} className="bg-[#111] rounded-[1px] border border-white/5"></div>
+                                                     ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
                                     
                                     return (
-                                        <button
-                                            key={idx}
-                                            onClick={() => handleQuickFill(fill.label)}
-                                            className={`
-                                                ${bgClass}
-                                                flex-1 min-w-[24px] h-6 rounded-[1px] border-b border-black/10 active:border-b-0 active:translate-y-[1px] transition-all
-                                                flex items-center justify-center shadow-sm group text-[8px] font-black tracking-tighter leading-none
-                                            `}
-                                            title={fill.label}
-                                        >
-                                            {fill.label}
-                                        </button>
-                                    )
-                                })}
+                                    <div key={track.id} className="flex items-center gap-1 h-6 shrink-0"> 
+                                        <div className={`w-20 shrink-0 truncate text-[9px] font-bold text-right pr-2 border-r border-white/10 ${selectedTrackId === track.id ? 'text-white' : 'text-neutral-500'}`}>
+                                            {track.name}
+                                        </div>
+                                        <div className="flex-1 grid grid-cols-8 gap-[2px] h-full">
+                                            {Array.from({length: PATTERN_COUNT}).map((_, pIdx) => {
+                                                const isActive = track.activePatternIdx === pIdx;
+                                                const pattern = track.patterns[pIdx];
+                                                const hasData = pattern.steps.some(s => s);
+                                                const trackColor = trackColorClass(track.color);
+                                                let bgClass = 'bg-[#0f0f0f]'; 
+                                                if (isActive) bgClass = trackColor; 
+                                                else if (hasData) bgClass = 'bg-neutral-700';
+                                                
+                                                return ( 
+                                                    <button key={pIdx} onClick={() => handleMatrixPatternSelect(track.id, pIdx)} className={`rounded-[1px] transition-all h-full w-full relative overflow-hidden group ${bgClass} ${isActive ? 'shadow-[0_0_8px_rgba(255,255,255,0.4)] z-10 scale-[1.05]' : 'hover:bg-neutral-600 border border-white/5'}`}> 
+                                                        {isActive && <div className="absolute inset-0 bg-white/20 animate-pulse"></div>} 
+                                                        {hasData && (
+                                                            <div className="absolute inset-0 p-[2px] flex items-center justify-center">
+                                                                <svg viewBox="0 0 16 4" className="w-full h-full opacity-50" preserveAspectRatio="none">
+                                                                    {pattern.steps.map((step, sIdx) => (
+                                                                        step ? <rect key={sIdx} x={sIdx} y={0} width={0.8} height={4} fill="currentColor" className="text-white" /> : null
+                                                                    ))}
+                                                                </svg>
+                                                            </div>
+                                                        )}
+                                                    </button> 
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )})}
                             </div>
                         </div>
 
-                        <div className="h-16 flex gap-2 mt-1">
-                             <div className="w-20 bg-neutral-800 rounded-sm flex flex-col items-center justify-center border-b-4 border-black shadow-md shrink-0">
-                                <div className={`w-3 h-3 rounded-full ${TRACK_COLORS[selectedTrack.color]} mb-1 shadow-[0_0_5px_currentColor]`}></div>
-                                <span className="text-[8px] text-neutral-500 font-bold">TRACK</span>
-                                <span className="text-sm font-black text-white uppercase leading-none truncate w-full text-center px-1">{selectedTrack.name}</span>
-                             </div>
-
-                            <div className="flex-1 relative bg-[#2a2a2a] rounded-sm p-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] border-b border-white/10">
-                                <StepSequencer 
-                                    steps={currentPattern.steps}
-                                    currentStep={currentStep}
-                                    onToggleStep={handleToggleStep}
-                                    trackColor={selectedTrack.color}
-                                />
-                            </div>
-                            <button onClick={handleClearTrack} className="w-12 h-full bg-[#d0d0d0] rounded-sm border-b-4 border-[#aaa] active:border-b-0 active:translate-y-[4px] transition-all flex flex-col items-center justify-center hover:bg-red-100 group shadow-sm shrink-0">
-                                <span className="text-[10px] font-black text-neutral-500 group-hover:text-red-500 -rotate-90 tracking-widest">CLR</span>
-                            </button>
-                        </div>
-
-                        <div className="flex flex-col gap-1 items-start w-full mt-1">
-                             <div className="flex items-center gap-2 px-1">
-                                 <div className={`w-2 h-2 rounded-full ${TRACK_COLORS[selectedTrack.color]}`}></div>
-                                 <span className="text-[10px] font-black text-[#888] tracking-widest uppercase">PATTERNS (7 BANKS)</span>
-                             </div>
-                             <div className="flex gap-1 w-full">
-                                {Array.from({length: PATTERN_COUNT}).map((_, i) => {
-                                    const isActive = selectedTrack.activePatternIdx === i;
-                                    const activeClass = TRACK_COLORS[selectedTrack.color];
-                                    return (
-                                        <button
-                                            key={i}
-                                            onClick={() => handlePatternSelect(i)}
-                                            className={`
-                                                flex-1 h-8 text-xs font-black flex items-center justify-center transition-all
-                                                ${isActive 
-                                                    ? `${activeClass} text-white translate-y-[2px] shadow-none ring-2 ring-white/50 z-10`
-                                                    : 'bg-[#dcdcdc] text-[#888] hover:bg-white border-b-[4px] border-[#bbb] active:border-b-0 active:translate-y-[4px] shadow-md'}
-                                            `}
-                                            style={{ borderRadius: '2px' }}
-                                        >
-                                            PTN {i + 1}
-                                        </button>
-                                    );
-                                })}
-                             </div>
-                             <button 
-                                onClick={handleToggleLock}
-                                className={`
-                                    w-full mt-1 py-1.5 rounded-sm text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all border
-                                    ${isLocked 
-                                        ? 'animate-rgb-lock text-white shadow-[0_0_15px_rgba(255,255,255,0.5)] border-transparent bg-neutral-900' 
-                                        : 'bg-[#d0d0d0] text-neutral-600 border-[#bbb] shadow-sm hover:bg-white active:translate-y-[1px]'}
-                                `}
-                             >
-                                {isLocked ? <LockClosedIcon className="w-3 h-3" /> : <LockOpenIcon className="w-3 h-3" />}
-                                {isLocked ? "LOCKED (PRESS TO RESTORE)" : "LOCK STATE"}
-                             </button>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0 items-stretch">
-                        <div className="flex flex-col gap-1 flex-grow lg:flex-[2]">
-                            <div className="flex justify-end items-end px-2 border-b-2 border-neutral-400 pb-1 shrink-0">
-                                <div className="flex gap-2 items-center overflow-x-auto pb-1 w-full scrollbar-hide">
-                                    {GENRES.map((genre) => (
-                                        <button 
-                                            key={genre}
-                                            onClick={() => loadGenre(genre)}
-                                            className={`
-                                                text-xs font-mono px-3 py-1.5 rounded-sm transition-all border-b-2 active:border-b-0 active:translate-y-[2px] font-bold whitespace-nowrap
-                                                ${selectedGenre === genre 
-                                                    ? 'bg-neutral-800 text-white border-neutral-950 shadow-lg scale-105' 
-                                                    : 'bg-neutral-300 text-neutral-600 border-neutral-400 hover:bg-white'}
-                                            `}
-                                        >
-                                            {genre}
-                                        </button>
-                                    ))}
+                        {/* RIGHT: RAVE FX & MACRO */}
+                        <div className="flex-[3.5] flex flex-col gap-2 min-w-0">
+                             <div className={`flex-1 bg-[#222] rounded-sm border border-white/10 shadow-md p-2 flex flex-col gap-1 relative overflow-hidden min-h-0`}>
+                                <div className="flex items-center justify-between px-1 mb-0.5 w-full relative">
+                                    <div className="flex items-center gap-2">
+                                        <SparklesIcon className="w-4 h-4 text-yellow-400 animate-spin-slow"/>
+                                        <span className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-shadow-neon">RAVE FX</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="w-full relative bg-[#b0b0b0] p-2 rounded-sm shadow-inner border-t border-white/50 h-auto overflow-hidden">
-                                <div className="relative z-10 grid grid-cols-5 gap-3">
-                                    {tracks.map((track, i) => {
-                                        const key = Object.keys(KEY_MAP).find(k => KEY_MAP[k] === i) || '';
+                                {/* Horizontal Strip */}
+                                <div className="flex-1 grid grid-cols-8 gap-1 min-h-0">
+                                    {fxSlots.map((fxType, index) => {
+                                        const info = FX_INFO[fxType];
+                                        const isActive = heldFxIndices.has(index) || latchedFxIndices.has(index);
+                                        const isLatched = latchedFxIndices.has(index);
+                                        const isFocused = focusedFxIndex === index;
                                         return (
-                                            <Pad 
-                                                key={track.id}
-                                                ref={el => { padRefs.current[track.id] = el }}
-                                                track={track}
-                                                isSelected={selectedTrackId === track.id}
-                                                onSelect={setSelectedTrackId}
-                                                onSelectVariation={handleVariationSelect}
-                                                onToggleMute={handleMuteToggle}
-                                                shortcutKey={key}
-                                            />
+                                            <div key={index} className="flex flex-col h-full min-h-0 relative group">
+                                                <button 
+                                                    onMouseDown={() => handleFxPadDown(index)} 
+                                                    onMouseUp={() => handleFxPadUp(index)} 
+                                                    onMouseLeave={() => handleFxPadUp(index)} 
+                                                    onTouchStart={(e) => { e.preventDefault(); handleFxPadDown(index); }} 
+                                                    onTouchEnd={(e) => { e.preventDefault(); handleFxPadUp(index); }} 
+                                                    className={`
+                                                        w-full h-full relative rounded-sm border-b-4 active:border-b-0 active:translate-y-[4px] transition-all flex flex-col items-center justify-center overflow-hidden min-h-0
+                                                        ${isActive ? `${info.color} text-white border-transparent z-10 scale-[1.02] ring-2 ring-white brightness-110 shadow-[0_0_15px_currentColor]` : `${info.color} text-white border-black/30 shadow-lg hover:brightness-110`}
+                                                        ${isFocused && !isActive ? 'ring-1 ring-white/50' : ''}
+                                                    `}
+                                                >
+                                                    {isActive && <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] animate-pulse"></div>}
+                                                    <span className={`text-[8px] font-black tracking-tighter z-10 ${isActive ? 'scale-125' : ''} transition-transform drop-shadow-md pointer-events-none truncate w-full px-0.5 rotate-[-90deg]`}>{info.label}</span>
+                                                </button>
+                                                <button onClick={(e) => toggleLatch(index, e)} className={`absolute top-0 right-0 w-3 h-3 rounded-bl-md border-l border-b border-black/20 flex items-center justify-center z-20 shadow-sm transition-all ${isLatched ? 'bg-[#39ff14] border-white shadow-[0_0_8px_#39ff14]' : 'bg-black/40 hover:bg-black/60'}`}>
+                                                    {isLatched && <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>}
+                                                </button>
+                                                <div className={`absolute bottom-0 left-0 w-4 h-4 flex items-center justify-center rounded-tr-md transition-colors z-30 cursor-pointer ${isActive ? 'bg-black/20 text-white' : 'bg-black/40 text-white hover:bg-black/60'}`} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                                                    <ChevronDownIcon className="w-3 h-3 relative z-10 pointer-events-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
+                                                    <select className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" value={fxType} onChange={(e) => handleFxSlotChange(index, e.target.value)}>
+                                                        {Object.keys(FX_INFO).map(key => (<option key={key} value={key} disabled={fxSlots.includes(key as MasterEffectType) && key !== fxType} className="text-black">{FX_INFO[key as MasterEffectType].label} - {key}</option>))}
+                                                    </select>
+                                                </div>
+                                            </div>
                                         );
                                     })}
                                 </div>
-                            </div>
+                             </div>
+                             <div className="h-[120px] bg-[#1a1a1a] rounded-sm border border-white/5 p-2 flex flex-col gap-2 shadow-inner shrink-0">
+                                <div className="flex justify-between items-center border-b border-white/5 pb-1">
+                                    <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">MACRO CONTROL</span>
+                                    <span className={`text-[10px] font-bold ${focusedFxInfo.color.replace('bg-', 'text-')} uppercase`}>{focusedFxInfo.label}</span>
+                                </div>
+                                <div className="flex-1 grid grid-cols-4 gap-2 items-center justify-around px-1">
+                                    <MacroKnob label="DRY/WET" value={currentFxParams[0]} onChange={(v) => handleFxParamChange(0, v)} color={focusedFxInfo.color} />
+                                    <MacroKnob label={focusedFxLabels.a} value={currentFxParams[1]} onChange={(v) => handleFxParamChange(1, v)} color={focusedFxInfo.color} />
+                                    <MacroKnob label={focusedFxLabels.b} value={currentFxParams[2]} onChange={(v) => handleFxParamChange(2, v)} color={focusedFxInfo.color} />
+                                    <MacroKnob label="VOLUME" value={currentFxParams[3]} onChange={(v) => handleFxParamChange(3, v)} color={focusedFxInfo.color} />
+                                </div>
+                             </div>
                         </div>
-                        <div className="flex flex-col gap-1 flex-grow lg:flex-[1]">
-                            <div className="flex justify-between items-end px-2 border-b-2 border-neutral-400 pb-1 shrink-0">
-                                <span className="font-black text-neutral-600 text-sm tracking-widest">MIXER & FX</span>
-                                <span className="font-mono text-[10px] text-neutral-500">15 CH ACTIVE</span>
-                            </div>
-                            <div className="bg-[#ccc] p-2 rounded-sm shadow-inner border border-neutral-400 flex-1 relative overflow-visible">
-                                <Mixer 
-                                    ref={mixerRef}
-                                    tracks={tracks} 
-                                    onUpdateVolume={handleVolumeChange}
-                                    onUpdateEffect={handleEffectChange}
-                                    onToggleMute={handleMuteToggle}
-                                    activeTrackId={selectedTrackId}
-                                    currentStep={currentStep}
-                                    isPlaying={isPlaying}
-                                    activeScene={activeScene}
-                                />
-                            </div>
+
+                    </div>
+                    
+                    <div className="bg-[#ccc] rounded-sm p-1.5 border border-white/20 shadow-inner w-full shrink-0">
+                        <div className="flex justify-between items-center mb-1 opacity-60 px-1">
+                            <div className="flex items-center gap-2"><BoltIcon className="w-3 h-3 text-neutral-600"/><span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">PRESETS (FILLS)</span></div>
+                        </div>
+                        <div className="flex flex-wrap gap-[2px] h-6 overflow-hidden content-start">
+                            {FILL_BUTTONS.map((fill, idx) => {
+                                let bgClass = 'bg-[#e0e0e0] hover:bg-white text-neutral-700';
+                                if (fill.cat === 'func') bgClass = 'bg-neutral-300 hover:bg-neutral-200 text-neutral-800';
+                                if (fill.cat === 'genre') bgClass = 'bg-blue-100 hover:bg-blue-50 text-blue-800';
+                                if (fill.cat === 'rand') bgClass = 'bg-orange-100 hover:bg-orange-50 text-orange-800';
+                                if (fill.cat === 'eucl') bgClass = 'bg-emerald-100 hover:bg-emerald-50 text-emerald-800';
+                                if (fill.cat === 'tuple') bgClass = 'bg-purple-100 hover:bg-purple-50 text-purple-800';
+                                return <button key={idx} onClick={() => handleQuickFill(fill.label)} className={`${bgClass} flex-1 min-w-[32px] h-6 rounded-[1px] border-b border-black/10 active:border-b-0 active:translate-y-[1px] transition-all flex items-center justify-center shadow-sm group text-[9px] font-black tracking-tighter leading-none`}>{fill.label}</button>
+                            })}
                         </div>
                     </div>
-                </div>
-                
-                <div className="bg-[#222] h-6 flex items-center justify-center gap-8 text-[9px] font-mono text-[#666] tracking-widest uppercase flex-shrink-0">
-                    <span>Designed in Tokyo</span>
-                    <span>Model: SB-3000</span>
-                    <span>Stereo Out</span>
+
+                    <div className="h-28 flex gap-2 shrink-0 w-full">
+                        <div className="w-24 bg-[#ccc] rounded-sm border border-white/20 h-full flex flex-col shadow-sm overflow-hidden shrink-0">
+                            <div className="h-4 bg-[#d4d4d4] border-b border-white/50 flex items-center justify-center shadow-sm z-10 shrink-0"><span className="text-[7px] font-black text-neutral-500 uppercase tracking-tighter">GLOBAL PATTERN</span></div>
+                            <div className="flex-1 flex flex-col items-center justify-center gap-1 p-1">
+                                <div className="bg-[#222] text-[#5eead4] font-['VT323'] text-lg leading-none w-full text-center rounded-sm border border-white/10 flex items-center justify-center flex-1">{legendaryCountDisplay}</div>
+                                <div className="flex w-full gap-0.5 h-5 shrink-0">
+                                    <button onClick={handlePrevPattern} className="flex-1 bg-[#dcdcdc] hover:bg-white rounded-sm border-b border-[#bbb] active:translate-y-[1px] active:border-b-0 flex items-center justify-center text-neutral-600 shadow-sm"><ChevronLeftIcon className="w-3 h-3"/></button>
+                                    <button onMouseDown={startRandomizing} onMouseUp={stopRandomizing} onMouseLeave={stopRandomizing} onTouchStart={(e) => { e.preventDefault(); startRandomizing(); }} onTouchEnd={(e) => { e.preventDefault(); stopRandomizing(); }} className="flex-1 bg-orange-500 hover:bg-orange-400 text-white rounded-sm border-b border-orange-700 active:translate-y-[1px] active:border-b-0 flex items-center justify-center shadow-sm"><CubeIcon className="w-3 h-3"/></button>
+                                    <button onClick={handleNextPattern} className="flex-1 bg-[#dcdcdc] hover:bg-white rounded-sm border-b border-[#bbb] active:translate-y-[1px] active:border-b-0 flex items-center justify-center text-neutral-600 shadow-sm"><ChevronRightIcon className="w-3 h-3"/></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="w-24 bg-neutral-800 rounded-sm flex flex-col items-center justify-center border-b-4 border-black shadow-md shrink-0">
+                            <div className={`w-3 h-3 rounded-full ${tracks.find(t=>t.id===selectedTrackId)?.color.replace('bg-', 'bg-') || 'bg-orange-500'} mb-1 shadow-[0_0_5px_currentColor]`}></div>
+                            <span className="text-[8px] text-neutral-500 font-bold">TRACK</span>
+                            <span className="text-sm font-black text-white uppercase leading-none truncate w-full text-center px-1">{selectedTrack.name}</span>
+                        </div>
+                        
+                        {/* Center Section: Step Sequencer AND Automation Editor */}
+                        <div className="flex-1 flex flex-col gap-1 min-w-0">
+                            
+                            {/* Step Sequencer */}
+                            <div className="h-10 relative bg-[#2a2a2a] rounded-sm p-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] border-b border-white/10 flex items-center gap-1">
+                                <div className="flex-1 h-full">
+                                        <StepSequencer steps={currentPattern.steps} currentStep={currentStep} onToggleStep={handleToggleStep} trackColor={selectedTrack.color} />
+                                </div>
+                                <button onClick={handleClearPattern} className="h-full w-10 rounded-[1px] bg-[#333] border border-white/5 hover:bg-red-900/50 hover:border-red-500/50 text-neutral-500 hover:text-red-500 flex items-center justify-center transition-colors group shrink-0 ml-1" title="Clear Pattern Steps"><span className="text-[9px] font-black group-hover:hidden">CLR</span><XMarkIcon className="w-4 h-4 hidden group-hover:block" /></button>
+                            </div>
+                            
+                            {/* AUTOMATION EDITOR SECTION */}
+                            <div className="flex-1 min-h-0 bg-[#151515] rounded-sm border border-white/5 relative">
+                                {lastTouchedParam ? (
+                                    <AutomationEditor 
+                                        track={tracks.find(t => t.id === lastTouchedParam.trackId) || selectedTrack}
+                                        paramName={lastTouchedParam.param}
+                                        paramLabel={lastTouchedParam.label}
+                                        automation={tracks.find(t => t.id === lastTouchedParam.trackId)?.patterns[tracks.find(t => t.id === lastTouchedParam.trackId)?.activePatternIdx || 0].automation[lastTouchedParam.param] || Array(16).fill(null)}
+                                        onUpdate={handleAutomationGridUpdate}
+                                        onClear={handleClearAutomation}
+                                        color={tracks.find(t => t.id === lastTouchedParam.trackId)?.color || 'orange'}
+                                        currentStep={currentStep}
+                                        isPlaying={isPlaying}
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-neutral-600 font-mono text-xs uppercase tracking-widest pointer-events-none">
+                                        Touch a knob to edit automation
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-2 min-h-[500px] bg-[#333] rounded-sm border-4 border-[#555] shadow-inner p-[3px] overflow-y-auto">
+                         <div className="flex justify-end mb-2 border-b border-white/10 pb-2">
+                             <div className="flex gap-2 items-center overflow-x-auto pb-1 w-full scrollbar-hide">
+                                    {GENRES.map((genre) => (
+                                        <button key={genre} onClick={() => loadGenre(genre)} className={`text-xs font-mono px-3 py-1.5 rounded-sm transition-all border-b-2 active:border-b-0 active:translate-y-[2px] font-bold whitespace-nowrap ${selectedGenre === genre ? 'bg-neutral-800 text-white border-black shadow-none ring-1 ring-white/20' : 'bg-[#e0e0e0] text-neutral-600 border-neutral-400 hover:bg-white'}`}>{genre}</button>
+                                    ))}
+                             </div>
+                         </div>
+                         {renderPads()}
+                    </div>
                 </div>
         </div>
       </div>
     </div>
   );
-}
-
-export default App;
+};

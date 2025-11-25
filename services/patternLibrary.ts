@@ -184,8 +184,7 @@ const createPatterns = (templates: Record<number, string[]>): GenrePatternSet =>
         result[trackId] = trackTemplates.map((patternStr, idx) => ({
             steps: p(patternStr || RHYTHMS.EMPTY),
             variation: idx % 4, 
-            pitch: 0,
-            pan: 0
+            // Removed explicit pitch/pan reset to preserve user values
         }));
     }
     return result;
